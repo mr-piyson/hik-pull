@@ -1,8 +1,9 @@
 # Hik-pull
 
-A self-hosted dashboard for Hikvision terminals. It connects to a device over
-ISAPI, backfills the access-control event log, streams new events live, and
-lists every authentication attempt with its raw major/minor codes.
+A self-hosted Hikvision access manager. It stores master user records in
+SQLite, pushes identity and card changes to configured terminals, records each
+per-device sync result, backfills the access-control event log, and streams
+new events live.
 
 Built and tested against a DS-K1T671MF-class face/card terminal.
 
@@ -30,6 +31,7 @@ and fixable. Mappings live in `src/lib/hik/events.ts`.
 
 ```bash
 npm install
+npm run db:push # create or update the local SQLite schema
 npm run dev   # http://localhost:3000
 ```
 
@@ -40,25 +42,41 @@ npm run build
 npm run start
 ```
 
-Then open the dashboard, add the device with its host/port/username/password,
-and connect. Adding a device validates the credentials immediately by fetching
-`/ISAPI/System/deviceInfo`, so a typo fails fast instead of silently persisting.
+Open the multi-page dashboard to manage devices, people, access events, and
+sync history separately. Add a device with its host/port/username/password;
+the credentials are validated immediately by fetching
+`/ISAPI/System/deviceInfo`.
 
 Devices, credentials and the event log are stored in a SQLite database at
 `.data/hik.db`, managed by Prisma. Passwords never leave the server: API
 responses expose only a `hasPassword` boolean.
 
-There is nothing to configure. `npm install` generates the Prisma client and
-`npm run dev` / `npm run build` apply pending migrations, so a fresh clone
-creates the database on first run. To put it elsewhere, set `DATABASE_URL`
-(e.g. `DATABASE_URL="file:/var/lib/hik/hik.db"`).
+`npm install` generates the Prisma client. Run `npm run db:push` after
+installing or after schema changes to add/update the SQLite tables. To put the
+database elsewhere, set `DATABASE_URL` (e.g.
+`DATABASE_URL="file:/var/lib/hik/hik.db"`).
 
 ## Database
 
 | Table | Holds |
 | --- | --- |
 | `Device` | One row per terminal: address, credentials, label |
+| `User` | Master directory: employee number, name, card number, user type, validity, optimized face photo |
+| `UserSyncLog` | Per-device success/failure history for every user sync attempt |
 | `LogEvent` | Every access event seen from a device |
+
+Employee numbers are unique in the master directory. Creating, updating,
+deleting, or retrying a user sends the change to all configured devices. A
+terminal failure does not discard the master record: the outcome and error are
+recorded for that device, and the user can be retried from the dashboard.
+Identity, card number, and validity are synchronized; door rights and schedules
+are intentionally omitted so the app does not change per-terminal permissions.
+Validity date-times are interpreted in the terminal's local time. A user photo
+is converted server-side to a JPEG smaller than 200 KB (maximum 190 KiB) before
+it is stored and sent to the terminal's `Intelligent/FDLib` face library.
+Source uploads are limited to 10 MB and 20 megapixels. Face photo enrollment
+requires a card number on the user and a face library configured on the device;
+device/model-specific failures are recorded in sync history.
 
 `LogEvent` is keyed by `(deviceId, id)`, where `id` is the event id the device
 itself reports. That identity is what makes the two independent ways we learn
@@ -81,7 +99,7 @@ failed insert.
 Useful commands:
 
 ```bash
-npm run db:migrate   # apply pending migrations (and prompt on schema drift)
+npm run db:push      # apply the Prisma schema to SQLite
 npm run db:studio    # browse the data
 ```
 
@@ -115,6 +133,10 @@ Colour is emitted only when stdout is a TTY, and is suppressed when
 
 **This must run somewhere that can reach the device and write to local disk.**
 It is intended for a host on the same network as the terminal.
+
+This dashboard currently has no application login. Restrict network access to
+trusted operators and use HTTPS when exposing it beyond a trusted local
+network. Device passwords are stored in SQLite and never returned by the API.
 
 Vercel is not a compatible target: serverless functions cannot reach RFC1918
 addresses such as `192.168.1.64`, and the filesystem is ephemeral, so stored

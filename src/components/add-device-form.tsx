@@ -202,7 +202,7 @@ export function AddDeviceForm({
         </button>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
           Credentials are verified against the device before being saved, and
-          stored server-side only in <code>.data/devices.json</code>.
+          stored server-side only in SQLite.
         </p>
       </div>
 

@@ -21,13 +21,12 @@ export function DeviceTable({
   onStop: () => void;
   onRemoved: (id: string) => void;
 }) {
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const remove = async (device: PublicDevice) => {
     const confirmed = window.confirm(
-      `Remove ${device.label}? Its stored credentials are deleted from disk.`,
+      `Remove ${device.label}? Its stored credentials are deleted from the database.`,
     );
     if (!confirmed) {
       return;
@@ -59,7 +58,7 @@ export function DeviceTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-      <table className="w-full min-w-[54rem] border-collapse text-left text-sm">
+      <table className="w-full min-w-[48rem] border-collapse text-left text-sm">
         <thead className="bg-zinc-100 text-xs uppercase tracking-wide text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
           <tr>
             <th scope="col" className="px-3 py-2">
@@ -70,9 +69,6 @@ export function DeviceTable({
             </th>
             <th scope="col" className="px-3 py-2">
               Username
-            </th>
-            <th scope="col" className="px-3 py-2">
-              Password
             </th>
             <th scope="col" className="px-3 py-2">
               Model / firmware
@@ -107,24 +103,6 @@ export function DeviceTable({
                 <td className="px-3 py-2 font-mono text-xs">
                   {device.username}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs">
-                  <span>{revealed[device.id] ? "visible" : "••••••••"}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRevealed((previous) => ({
-                        ...previous,
-                        [device.id]: !previous[device.id],
-                      }));
-                    }}
-                    className="ml-2 text-xs text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
-                  >
-                    {revealed[device.id] ? "hide" : "show"}
-                  </button>
-                  <p className="mt-0.5 text-[10px] text-zinc-400">
-                    stored server-side
-                  </p>
-                </td>
                 <td className="px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">
                   {info ? (
                     <>
@@ -157,7 +135,7 @@ export function DeviceTable({
                         }}
                         className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
                       >
-                        Stream
+                        Events
                       </button>
                     )}
                     <button

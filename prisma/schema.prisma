@@ -1,6 +1,4 @@
-// Two tables: the devices we can talk to, and every access event we have seen
-// from them. Events are keyed by the device's own stable `id` so a live stream
-// event and the same event pulled later by history search collapse into one row.
+// Device configuration, master users, access events, and user sync history.
 
 generator client {
   provider = "prisma-client"
@@ -26,6 +24,7 @@ model Device {
   createdAt String
 
   events LogEvent[]
+  syncLogs UserSyncLog[]
 
   @@index([host])
 }
@@ -73,4 +72,45 @@ model LogEvent {
   @@index([deviceId, timeMs])
   @@index([deviceId, direction])
   @@index([receivedAt])
+}
+
+/// Master user records maintained by this application and synchronized to
+/// each configured terminal. Date-time strings are local terminal times.
+model User {
+  id         String   @id
+  employeeNo String   @unique
+  name       String
+  cardNo     String   @default("")
+  userType   String   @default("normal")
+  validFrom  String?
+  validUntil String?
+  photoData  Bytes?
+  photoMimeType String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  syncLogs UserSyncLog[]
+
+  @@index([name])
+}
+
+/// Immutable record of each user sync attempt, including deleted users.
+model UserSyncLog {
+  id          String   @id
+  userId      String?
+  employeeNo  String
+  userName    String
+  deviceId    String?
+  deviceLabel String
+  operation   String
+  status      String
+  message     String?
+  createdAt   DateTime @default(now())
+
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  device Device? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([deviceId, createdAt])
+  @@index([employeeNo, createdAt])
 }

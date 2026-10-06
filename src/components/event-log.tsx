@@ -103,7 +103,7 @@ export function EventLog({
   if (!deviceLabel) {
     return (
       <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-        Select a device and press Stream to start pulling access events.
+        Select a terminal above to load history and start its live event stream.
       </div>
     );
   }

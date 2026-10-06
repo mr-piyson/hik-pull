@@ -1,3 +1,4 @@
+import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import { buildDigestAuthorization, parseChallenge } from "./digest";
 import { normalizeHistoryItem, toIsapiTime, unwrapRoot } from "./events";
@@ -84,9 +85,11 @@ async function deviceErrorMessage(response: Response): Promise<string | null> {
   }
 }
 
-type RequestOptions = {
+export type RequestOptions = {
   method?: string;
   json?: unknown;
+  rawBody?: Uint8Array<ArrayBuffer>;
+  contentType?: string;
   headers?: Record<string, string>;
   /** Timeout for reaching response headers. `null` disables it (streaming). */
   timeoutMs?: number | null;
@@ -108,8 +111,11 @@ export async function isapiRequest(
 ): Promise<Response> {
   const method = options.method ?? "GET";
   const url = `${baseUrl(device)}${path}`;
-  const body =
-    options.json === undefined ? undefined : JSON.stringify(options.json);
+  const body = options.rawBody
+    ? new Uint8Array(options.rawBody)
+    : options.json === undefined
+      ? undefined
+      : JSON.stringify(options.json);
 
   const baseHeaders: Record<string, string> = {
     Accept: "application/json, application/xml, text/xml, */*",
@@ -117,6 +123,9 @@ export async function isapiRequest(
   };
   if (options.json !== undefined) {
     baseHeaders["Content-Type"] = "application/json";
+  }
+  if (options.contentType) {
+    baseHeaders["Content-Type"] = options.contentType;
   }
 
   const timeoutMs =
@@ -226,6 +235,176 @@ async function isapiJson<T>(
     `Device returned an unreadable body for ${path}. Expected JSON or XML.`,
     response.status,
     text.slice(0, 200) || null,
+  );
+}
+
+/** Execute an ISAPI command and preserve actionable errors returned by device firmware. */
+export async function isapiCommand(
+  device: DeviceCredentials,
+  path: string,
+  options: RequestOptions = {},
+): Promise<void> {
+  const method = options.method ?? "GET";
+  const response = await isapiRequest(device, path, options);
+  if (!response.ok) {
+    throw new HikRequestError(
+      `${method} ${path} failed with HTTP ${response.status}`,
+      response.status,
+      await deviceErrorMessage(response),
+    );
+  }
+  const text = await response.text();
+  const raw = text.trim() ? tryParseBody(text) : null;
+  if (!raw) {
+    return;
+  }
+  const result = unwrapRoot(raw);
+  const statusCode = result.statusCode;
+  if (statusCode !== undefined && String(statusCode) !== "1") {
+    const details = [
+      result.statusString,
+      result.subStatusCode,
+      result.errorMsg,
+    ].filter(
+      (value): value is string => typeof value === "string" && value.length > 0,
+    );
+    throw new HikRequestError(
+      `${method} ${path} returned device status ${String(statusCode)}${details.length > 0 ? `: ${details.join(" / ")}` : ""}`,
+      response.status,
+      details.join(" / ") || null,
+    );
+  }
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value === "string" && value.length > 0) {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return null;
+}
+
+export async function getFaceLibrary(
+  device: DeviceCredentials,
+): Promise<{ fdid: string; faceLibType: string }> {
+  const raw = await isapiJson<Record<string, unknown>>(
+    device,
+    "/ISAPI/Intelligent/FDLib?format=json",
+  );
+  const root = unwrapRoot(raw);
+  let libraries: unknown = root.FDLib ?? root.FDLibList;
+  if (
+    libraries === undefined &&
+    (root.FDID !== undefined || root["@FDID"] !== undefined)
+  ) {
+    libraries = root;
+  }
+  if (
+    typeof libraries === "object" &&
+    libraries !== null &&
+    !Array.isArray(libraries)
+  ) {
+    const wrapper = libraries as Record<string, unknown>;
+    libraries = wrapper.FDLib ?? wrapper.FDLibList ?? wrapper;
+  }
+  const first = Array.isArray(libraries) ? libraries[0] : libraries;
+  if (typeof first !== "object" || first === null) {
+    throw new HikRequestError(
+      "The device returned no face library. Create a face library in the device first.",
+      200,
+      null,
+    );
+  }
+  const library = first as Record<string, unknown>;
+  const fdid = asString(library.FDID ?? library["@FDID"]);
+  const faceLibType = asString(library.faceLibType ?? library["@faceLibType"]);
+  if (!fdid || !faceLibType) {
+    throw new HikRequestError(
+      "The device face library response is missing FDID or faceLibType.",
+      200,
+      null,
+    );
+  }
+  return { fdid, faceLibType };
+}
+
+export async function uploadFaceImage(
+  device: DeviceCredentials,
+  input: {
+    employeeNo: string;
+    name: string;
+    image: Uint8Array;
+  },
+): Promise<void> {
+  const { fdid, faceLibType } = await getFaceLibrary(device);
+  const metadata = JSON.stringify({
+    faceLibType,
+    FDID: fdid,
+    FPID: input.employeeNo,
+    name: input.name,
+  });
+  const boundary = `hik-${randomUUID()}`;
+  const body = Buffer.concat([
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="FaceDataRecord"; filename="record.json"\r\nContent-Type: application/json\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Disposition: form-data; name="img"; filename="face.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`,
+    ),
+    Buffer.from(input.image),
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ]);
+  const path = "/ISAPI/Intelligent/FDLib/FaceDataRecord?format=json";
+  try {
+    await isapiCommand(device, path, {
+      method: "POST",
+      rawBody: new Uint8Array(body),
+      contentType: `multipart/form-data; boundary=${boundary}`,
+      timeoutMs: 30_000,
+    });
+  } catch (error) {
+    const message =
+      error instanceof HikRequestError
+        ? `${error.message} ${error.deviceMessage ?? ""}`.toLowerCase()
+        : "";
+    if (
+      !(error instanceof HikRequestError) ||
+      !/exist|duplicate|already/.test(message)
+    ) {
+      throw error;
+    }
+
+    const query = new URLSearchParams({
+      format: "json",
+      FDID: fdid,
+      FPID: input.employeeNo,
+      faceLibType,
+    });
+    const dataUrl = `data:image/jpeg;base64,${Buffer.from(input.image).toString("base64")}`;
+    await isapiCommand(device, `/ISAPI/Intelligent/FDLib/FDSearch?${query}`, {
+      method: "PUT",
+      json: { name: input.name, faceURL: dataUrl },
+      timeoutMs: 30_000,
+    });
+  }
+}
+
+export async function deleteFaceImage(
+  device: DeviceCredentials,
+  employeeNo: string,
+): Promise<void> {
+  const { fdid, faceLibType } = await getFaceLibrary(device);
+  const query = new URLSearchParams({
+    format: "json",
+    FDID: fdid,
+    faceLibType,
+  });
+  await isapiCommand(
+    device,
+    `/ISAPI/Intelligent/FDLib/FDSearch/Delete?${query}`,
+    {
+      method: "PUT",
+      json: { FPID: [{ value: employeeNo }] },
+    },
   );
 }
 

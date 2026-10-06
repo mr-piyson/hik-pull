@@ -8,11 +8,8 @@
     "start": "next start",
     "lint": "biome check",
     "format": "biome format --write",
+    "db:push": "prisma db push",
     "postinstall": "prisma generate",
-    "predev": "prisma generate && prisma migrate deploy",
-    "prebuild": "prisma generate && prisma migrate deploy",
-    "prestart": "prisma migrate deploy",
-    "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio"
   },
   "dependencies": {
@@ -20,7 +17,8 @@
     "@prisma/client": "^7.10.0",
     "next": "16.3.8",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.2",

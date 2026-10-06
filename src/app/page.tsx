@@ -1,12 +1,26 @@
 import { Dashboard } from "@/components/dashboard";
-import { listDevices } from "@/lib/hik/store";
-import { toPublicDevice } from "@/lib/hik/types";
+import { prisma } from "@/lib/hik/db";
+import { listUserSyncLogs } from "@/lib/hik/user-store";
 
-// Devices live on disk and change outside the render, so this must never be
-// prerendered.
+// The overview reflects live database counts and is rendered on every request.
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const devices = (await listDevices()).map(toPublicDevice);
-  return <Dashboard initialDevices={devices} />;
+  const [deviceCount, userCount, eventCount, failedSyncCount, recentSyncs] =
+    await Promise.all([
+      prisma.device.count(),
+      prisma.user.count(),
+      prisma.logEvent.count(),
+      prisma.userSyncLog.count({ where: { status: "failure" } }),
+      listUserSyncLogs(6),
+    ]);
+  return (
+    <Dashboard
+      deviceCount={deviceCount}
+      userCount={userCount}
+      eventCount={eventCount}
+      failedSyncCount={failedSyncCount}
+      recentSyncs={recentSyncs}
+    />
+  );
 }
