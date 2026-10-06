@@ -69,14 +69,20 @@ Employee numbers are unique in the master directory. Creating, updating,
 deleting, or retrying a user sends the change to all configured devices. A
 terminal failure does not discard the master record: the outcome and error are
 recorded for that device, and the user can be retried from the dashboard.
-Identity, card number, and validity are synchronized; door rights and schedules
-are intentionally omitted so the app does not change per-terminal permissions.
-Validity date-times are interpreted in the terminal's local time. A user photo
-is converted server-side to a JPEG smaller than 200 KB (maximum 190 KiB) before
-it is stored and sent to the terminal's `Intelligent/FDLib` face library.
+Identity, card number, validity, and door rights are synchronized. Each person
+is assigned Door 1 with plan template 1; that plan template must exist and
+allow access on each terminal. Authentication mode inherits the terminal
+setting (`userVerifyMode` is left at its device default).
+Validity date-times are interpreted in the terminal's local time and enabled
+for synced users. Terminals only accept validity dates through
+`2037-12-31 23:59`; later expiration dates are capped to that terminal limit
+when synchronized. A user photo is converted server-side to a JPEG smaller
+than 200 KB (maximum 190 KiB) before it is stored and sent to the terminal's
+`Intelligent/FDLib` face library.
 Source uploads are limited to 10 MB and 20 megapixels. Face photo enrollment
-requires a card number on the user and a face library configured on the device;
-device/model-specific failures are recorded in sync history.
+requires a face library configured on the device. Successful authentication
+requires the assigned door and plan template to be enabled on that terminal.
+Device/model-specific sync failures are recorded in history.
 
 `LogEvent` is keyed by `(deviceId, id)`, where `id` is the event id the device
 itself reports. That identity is what makes the two independent ways we learn

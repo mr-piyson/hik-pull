@@ -10,12 +10,21 @@ import { getManagedUserPhoto, recordUserSync } from "./user-store";
 import type { ManagedUser, UserSyncResult } from "./user-types";
 
 type SyncOperation = "create" | "update" | "delete" | "retry" | "photo";
+const MAX_DEVICE_DATE_TIME = "2037-12-31T23:59";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof HikRequestError && error.deviceMessage) {
     return `${error.message}: ${error.deviceMessage}`;
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+function isAlreadyAbsent(error: unknown): boolean {
+  if (error instanceof HikRequestError && error.status === 404) {
+    return true;
+  }
+  const message = getErrorMessage(error).toLowerCase();
+  return /not.?exist|not.?found|no.?such|does.?not.?exist/.test(message);
 }
 
 function canTryAlternate(error: unknown): boolean {
@@ -67,17 +76,30 @@ function userInfoPayload(user: ManagedUser) {
     2,
     "0",
   )}-${String(localToday.getDate()).padStart(2, "0")}T00:00:00`;
+  if (user.validFrom && user.validFrom > MAX_DEVICE_DATE_TIME) {
+    throw new Error(
+      `Valid from cannot be after ${MAX_DEVICE_DATE_TIME.replace("T", " ")} because of terminal date limits.`,
+    );
+  }
+  const endTime =
+    user.validUntil && user.validUntil > MAX_DEVICE_DATE_TIME
+      ? "2037-12-31T23:59:59"
+      : user.validUntil
+        ? `${user.validUntil}:00`
+        : "2037-12-31T23:59:59";
   return {
     UserInfo: {
       employeeNo: user.employeeNo,
       name: user.name,
       userType: user.userType,
+      doorRight: "1",
+      RightPlan: [{ doorNo: 1, planTemplateNo: "1" }],
+      userVerifyMode: "",
+      localUIRight: false,
       Valid: {
-        enable: Boolean(user.validFrom || user.validUntil),
+        enable: true,
         beginTime: user.validFrom ? `${user.validFrom}:00` : currentDayStart,
-        endTime: user.validUntil
-          ? `${user.validUntil}:00`
-          : "2037-12-31T23:59:59",
+        endTime,
         timeType: "local",
       },
     },
@@ -160,35 +182,59 @@ async function removePerson(
   user: ManagedUser,
   hasPhoto: boolean,
 ): Promise<void> {
+  const failures: string[] = [];
+
   if (hasPhoto) {
-    await deleteFaceImage(device, user.employeeNo);
+    try {
+      await deleteFaceImage(device, user.employeeNo);
+    } catch (error) {
+      if (!isAlreadyAbsent(error)) {
+        failures.push(`Face photo: ${getErrorMessage(error)}`);
+      }
+    }
   }
   if (user.cardNo) {
+    try {
+      await isapiCommand(
+        device,
+        "/ISAPI/AccessControl/CardInfo/Delete?format=json",
+        {
+          method: "PUT",
+          json: {
+            CardInfoDelCond: {
+              EmployeeNoList: [{ employeeNo: user.employeeNo }],
+            },
+          },
+        },
+      );
+    } catch (error) {
+      if (!isAlreadyAbsent(error)) {
+        failures.push(`Card: ${getErrorMessage(error)}`);
+      }
+    }
+  }
+  try {
     await isapiCommand(
       device,
-      "/ISAPI/AccessControl/CardInfo/Delete?format=json",
+      "/ISAPI/AccessControl/UserInfo/Delete?format=json",
       {
         method: "PUT",
         json: {
-          CardInfoDelCond: {
+          UserInfoDelCond: {
             EmployeeNoList: [{ employeeNo: user.employeeNo }],
           },
         },
       },
     );
+  } catch (error) {
+    if (!isAlreadyAbsent(error)) {
+      failures.push(`User: ${getErrorMessage(error)}`);
+    }
   }
-  await isapiCommand(
-    device,
-    "/ISAPI/AccessControl/UserInfoDetail/Delete?format=json",
-    {
-      method: "POST",
-      json: {
-        UserInfoDetailCond: {
-          EmployeeNoList: [{ employeeNo: user.employeeNo }],
-        },
-      },
-    },
-  );
+
+  if (failures.length > 0) {
+    throw new Error(failures.join("; "));
+  }
 }
 
 async function syncAcrossDevices(
@@ -210,27 +256,12 @@ async function syncAcrossDevices(
       let ok = false;
       try {
         if (operation === "delete") {
-          try {
-            await removePerson(device, user, user.photoUrl !== null);
-          } catch (error) {
-            if (
-              !(error instanceof HikRequestError) ||
-              error.status !== 404 ||
-              user.photoUrl !== null
-            ) {
-              throw error;
-            }
-          }
+          await removePerson(device, user, user.photoUrl !== null);
         } else {
           if (operation !== "photo") {
             await syncPerson(device, user, previousCardNo);
           }
           if (photo) {
-            if (!user.cardNo) {
-              throw new Error(
-                "A card number is required to associate a face photo on this terminal.",
-              );
-            }
             await uploadFaceImage(device, {
               employeeNo: user.employeeNo,
               name: user.name,

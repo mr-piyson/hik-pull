@@ -7,6 +7,7 @@ import {
 
 const EMPLOYEE_NO_RE = /^[A-Za-z0-9._-]{1,32}$/;
 const LOCAL_DATE_TIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
+const MAX_DEVICE_DATE_TIME = "2037-12-31T23:59";
 
 function parseOptionalDateTime(value: unknown, field: string): string | null {
   if (value === undefined || value === null || value === "") {
@@ -18,6 +19,11 @@ function parseOptionalDateTime(value: unknown, field: string): string | null {
   const match = LOCAL_DATE_TIME_RE.exec(value);
   if (!match) {
     throw new Error(`${field} must use YYYY-MM-DDTHH:mm format.`);
+  }
+  if (field === "Valid from" && value > MAX_DEVICE_DATE_TIME) {
+    throw new Error(
+      `${field} must be on or before ${MAX_DEVICE_DATE_TIME.replace("T", " ")} because of terminal date limits.`,
+    );
   }
 
   const [, year, month, day, hour, minute] = match;

@@ -223,7 +223,10 @@ export function UserManagement({
       setFeedback(
         payload.deleted
           ? `Removed from the master database. ${syncSummary(payload.results ?? [])}`
-          : `Master record retained because at least one device did not confirm deletion. ${syncSummary(payload.results ?? [])} Retry after resolving the device issue.`,
+          : `Master record retained because at least one device did not confirm deletion. ${syncSummary(payload.results ?? [])} ${payload.results
+              ?.filter((result) => !result.ok)
+              .map((result) => `${result.deviceLabel}: ${result.message}`)
+              .join(" ")} Retry after resolving the device issue.`,
       );
       if (payload.deleted && editingId === user.id) {
         setEditingId(null);
@@ -276,8 +279,9 @@ export function UserManagement({
         <div>
           <h2 className="text-lg font-semibold tracking-tight">People</h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            The database is the source of truth. Identity and card changes are
-            pushed to every configured terminal.
+            The database is the source of truth. People are assigned to Door 1
+            with plan template 1; authentication inherits each terminal&apos;s
+            setting.
           </p>
         </div>
         <div className="flex gap-2 text-xs">
@@ -346,7 +350,8 @@ export function UserManagement({
             <span className="text-xs text-zinc-500 dark:text-zinc-400">
               JPEG, PNG, WebP or AVIF, up to 10 MB. The server converts it to a
               JPEG under 200 KB before storing and syncing. Face enrollment
-              requires a card number and a face library on each terminal.
+              requires a face library on each terminal. Terminal access rights
+              are assigned to Door 1 / plan template 1.
             </span>
           </label>
         </div>
@@ -381,6 +386,7 @@ export function UserManagement({
           <span className="font-medium">Valid from (device local time)</span>
           <input
             type="datetime-local"
+            max="2037-12-31T23:59"
             value={form.validFrom}
             onChange={(event) => updateForm("validFrom", event.target.value)}
             className="rounded-md border border-zinc-300 bg-background px-3 py-2 text-sm outline-none focus:border-blue-500 dark:border-zinc-700"
