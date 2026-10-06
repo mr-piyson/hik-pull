@@ -1,0 +1,76 @@
+// Two tables: the devices we can talk to, and every access event we have seen
+// from them. Events are keyed by the device's own stable `id` so a live stream
+// event and the same event pulled later by history search collapse into one row.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Device {
+  id        String   @id
+  label     String
+  /// "http" | "https" — SQLite has no enums, so validated in code.
+  scheme    String   @default("http")
+  host      String
+  port      Int      @default(80)
+  username  String
+  /// Plaintext, same as it always was in `.data/devices.json`. The app runs on
+  /// a LAN with no users or TLS, so this is not a downgrade. Never returned by
+  /// any API — see `toPublicDevice`.
+  password  String   @default("")
+  createdAt String
+
+  events LogEvent[]
+
+  @@index([host])
+}
+
+/// One access-control event. `deviceId + id` is the identity: `id` is stable
+/// for a given event on a given device but only unique within that device.
+model LogEvent {
+  /// The device's stable event id (serial number, or a time/card derived key).
+  id       String
+  deviceId String
+
+  /// Device-reported timestamp, kept verbatim (including its timezone offset)
+  /// so what is shown is exactly what the terminal said. Display only.
+  time String?
+
+  /// Epoch milliseconds parsed from `time`, used for range filters and
+  /// ordering. The verbatim `time` string carries a local offset, so it cannot
+  /// be compared against the UTC bounds the client sends. `null` when the
+  /// device omitted a usable timestamp.
+  timeMs BigInt?
+
+  /// "in" | "denied" | "door" | "other"
+  direction String
+  /// Human label for the minor code, e.g. "fingerprint invalid".
+  label String
+  major Int
+  minor Int
+
+  name       String @default("")
+  employeeNo String @default("")
+  cardNo     String @default("")
+  readerNo   Int?
+  serialNo   String?
+
+  /// "live" | "backfill"
+  source String
+
+  /// When *we* learned about it, for stable server-side ordering of events
+  /// that share a device timestamp.
+  receivedAt DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@id([deviceId, id])
+  @@index([deviceId, timeMs])
+  @@index([deviceId, direction])
+  @@index([receivedAt])
+}
