@@ -57,7 +57,10 @@ export async function POST(request: Request) {
   // now rather than surfacing as an authentication failure later.
   try {
     const info = await probeDevice(device);
-    const saved = await saveDevice(device);
+    const saved = await saveDevice(device, {
+      model: info.model,
+      serial: info.serialNumber,
+    });
     return Response.json(
       { device: toPublicDevice(saved), info },
       { status: 201 },

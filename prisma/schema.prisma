@@ -23,6 +23,9 @@ model Device {
   password  String   @default("")
   createdAt String
 
+  deviceModel  String?
+  deviceSerial String?
+
   events LogEvent[]
   syncLogs UserSyncLog[]
 
@@ -72,6 +75,29 @@ model LogEvent {
   @@index([deviceId, timeMs])
   @@index([deviceId, direction])
   @@index([receivedAt])
+}
+
+/// Successful person-authentication events, retained independently of devices
+/// and the general access-event log.
+model AttendanceLog {
+  id           String    @id
+  deviceIp     String?   @map("device_ip")
+  deviceModel  String?   @map("device_model")
+  deviceSerial String?   @map("device_serial")
+  serialNo     BigInt?   @map("serial_no")
+  personId     String?   @map("person_id")
+  personName   String?   @map("person_name")
+  cardNo       String?   @map("card_no")
+  dateTime     DateTime? @map("datetime")
+  timeRaw      String?   @map("time_raw")
+
+  /// Internal event identity prevents live-stream and history imports from
+  /// storing the same terminal event twice.
+  sourceKey String @unique @map("_source_key")
+
+  @@index([dateTime])
+  @@index([personId, dateTime])
+  @@map("attendance_logs")
 }
 
 /// Master user records maintained by this application and synchronized to

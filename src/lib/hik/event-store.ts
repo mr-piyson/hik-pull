@@ -1,5 +1,6 @@
+import { recordAttendanceEvents } from "./attendance-store";
 import { prisma } from "./db";
-import type { AccessDirection, AccessEvent } from "./types";
+import type { AccessDirection, AccessEvent, DeviceRecord } from "./types";
 
 /**
  * The event log. Rows are keyed by `(deviceId, id)` — the device's own stable
@@ -69,7 +70,10 @@ function toAccessEvent(row: EventRow): AccessEvent {
  * be atomic, or a live event arriving during a backfill could make the whole
  * insert fail on the unique constraint.
  */
-export async function recordEvents(events: AccessEvent[]): Promise<number> {
+export async function recordEvents(
+  events: AccessEvent[],
+  device: DeviceRecord,
+): Promise<number> {
   if (events.length === 0) {
     return 0;
   }
@@ -94,6 +98,13 @@ export async function recordEvents(events: AccessEvent[]): Promise<number> {
   let inserted = 0;
   for (let index = 0; index < rows.length; index += INSERT_CHUNK) {
     inserted += await storeChunk(rows.slice(index, index + INSERT_CHUNK));
+  }
+  try {
+    await recordAttendanceEvents(device, events);
+  } catch (error) {
+    console.error(
+      `[attendance] Could not save successful authentication events for ${device.host}:${device.port}: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
   return inserted;
 }

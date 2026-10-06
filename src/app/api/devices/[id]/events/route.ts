@@ -131,7 +131,7 @@ export async function GET(
       // what anyone wants when opening a log.
       fetched.sort((a, b) => (b.time ?? "").localeCompare(a.time ?? ""));
       const unique = new Set(fetched.map((event) => event.id)).size;
-      const stored = await recordEvents(fetched);
+      const stored = await recordEvents(fetched, device);
       logBackfill(device, fetched, truncated, { unique, new: stored });
 
       const caps = await getAcsEventCapabilities(device);

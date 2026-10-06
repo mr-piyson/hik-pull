@@ -47,8 +47,34 @@ export async function getDevice(id: string): Promise<DeviceRecord | null> {
   return row ? toRecord(row) : null;
 }
 
+export async function getDeviceMetadata(
+  id: string,
+): Promise<{ model: string | null; serial: string | null } | null> {
+  const row = await prisma.device.findUnique({
+    where: { id },
+    select: { deviceModel: true, deviceSerial: true },
+  });
+  return row ? { model: row.deviceModel, serial: row.deviceSerial } : null;
+}
+
+export async function saveDeviceMetadata(
+  id: string,
+  metadata: { model: string; serial: string },
+): Promise<void> {
+  await prisma.device.update({
+    where: { id },
+    data: {
+      deviceModel: metadata.model || null,
+      deviceSerial: metadata.serial || null,
+    },
+  });
+}
+
 /** Insert-or-replace, which is what the old JSON store did too. */
-export async function saveDevice(device: DeviceRecord): Promise<DeviceRecord> {
+export async function saveDevice(
+  device: DeviceRecord,
+  metadata?: { model: string; serial: string },
+): Promise<DeviceRecord> {
   const data = {
     label: device.label,
     scheme: device.scheme,
@@ -57,6 +83,12 @@ export async function saveDevice(device: DeviceRecord): Promise<DeviceRecord> {
     username: device.username,
     password: device.password,
     createdAt: device.createdAt,
+    ...(metadata
+      ? {
+          deviceModel: metadata.model || null,
+          deviceSerial: metadata.serial || null,
+        }
+      : {}),
   };
   await prisma.device.upsert({
     where: { id: device.id },

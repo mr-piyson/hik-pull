@@ -52,10 +52,12 @@ export async function PATCH(
     next.password !== device.password ||
     next.host !== device.host ||
     next.username !== device.username;
+  let metadata: { model: string; serial: string } | null = null;
 
   if (changedCredentials) {
     try {
-      await probeDevice(next);
+      const info = await probeDevice(next);
+      metadata = { model: info.model, serial: info.serialNumber };
     } catch (error) {
       return Response.json(
         {
@@ -68,7 +70,8 @@ export async function PATCH(
     }
   }
 
-  return Response.json({ device: toPublicDevice(await saveDevice(next)) });
+  const saved = await saveDevice(next, metadata ?? undefined);
+  return Response.json({ device: toPublicDevice(saved) });
 }
 
 export async function DELETE(

@@ -3,7 +3,8 @@
 A self-hosted Hikvision access manager. It stores master user records in
 SQLite, pushes identity and card changes to configured terminals, records each
 per-device sync result, backfills the access-control event log, and streams
-new events live.
+new events live. Successful authentications are also retained in a dedicated
+attendance table and page.
 
 Built and tested against a DS-K1T671MF-class face/card terminal.
 
@@ -64,6 +65,7 @@ database elsewhere, set `DATABASE_URL` (e.g.
 | `User` | Master directory: identity, location, person type, validity, up to five cards, authentication settings and optimized face photo |
 | `UserSyncLog` | Per-device success/failure history for every user sync attempt |
 | `LogEvent` | Every access event seen from a device |
+| `AttendanceLog` (`attendance_logs`) | Successful person authentications, including device and original timestamp details |
 
 Employee numbers are unique in the master directory. Creating, updating,
 deleting, or retrying a user sends the change to all configured devices. A
@@ -106,6 +108,26 @@ Live events are written from the stream loop without waiting for the write to
 finish — a slow disk must never stall the reader, because the device drops a
 connection that falls behind, and losing that costs far more events than one
 failed insert.
+
+Successful authentications are copied from both live events and history
+backfills to `attendance_logs`. The saved fields are device address
+(`host:port`), model, serial, event serial number, person ID/name, card number,
+parsed date-time, and the original device timestamp. A private event key
+deduplicates the same event seen by both ingestion paths. Attendance rows are
+not deleted when a device is removed. Only events classified as granted by the
+current event-code map are included; unrecognized device-specific face codes
+remain unclassified until they can be confirmed.
+Attendance requires at least one person identifier (employee number, name, or
+card number). If a terminal reports a generic grant with no person fields, the
+collector correlates it with the nearest person-attributed `door opened` event
+(minor code 75) from the same device within 10 seconds. The attendance row
+retains the grant event's serial and timestamp and takes identity from the
+correlated door event. Old anonymous rows are repaired when attendance is read
+if their matching access events are present; unresolved anonymous rows are not
+shown.
+Collection happens while a device live stream is running or when its event
+history is pulled from the Access events page; the attendance page displays
+saved records and does not start device connections on its own.
 
 Useful commands:
 
@@ -186,6 +208,7 @@ complete — via `Content-Length` when present, otherwise on a short idle timeou
 | `GET` | `/api/devices/{id}/events` | Event log for a time range |
 | `GET` | `/api/devices/{id}/stream?action=start\|stop` | Control live stream |
 | `GET` | `/api/devices/{id}/stream` | SSE event feed |
+| `GET` | `/api/attendance?offset=0&limit=100` | Page through successful attendance records |
 
 `/api/devices/{id}/events` accepts `from`, `to`, `limit`, `direction`
 (`in` \| `denied` \| `door` \| `other`) and `refresh`. Reads always come from

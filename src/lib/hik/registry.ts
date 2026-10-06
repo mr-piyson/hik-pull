@@ -108,7 +108,7 @@ function backoffDelay(attempt: number): number {
  * events than one failed insert. Failures are logged rather than swallowed.
  */
 function persistEvent(device: DeviceRecord, event: AccessEvent): void {
-  void recordEvents([event]).catch((error) => {
+  void recordEvents([event], device).catch((error) => {
     logStream(
       device,
       "error",
