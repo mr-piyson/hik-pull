@@ -77,13 +77,22 @@ model LogEvent {
 /// Master user records maintained by this application and synchronized to
 /// each configured terminal. Date-time strings are local terminal times.
 model User {
-  id         String   @id
-  employeeNo String   @unique
-  name       String
-  cardNo     String   @default("")
-  userType   String   @default("normal")
-  validFrom  String?
-  validUntil String?
+  id                  String   @id
+  employeeNo          String   @unique
+  name                String
+  cardNo              String   @default("")
+  cardNosJson         String   @default("[]")
+  userType            String   @default("normal")
+  floorNumber         Int      @default(0)
+  roomNumber          Int      @default(0)
+  gender              String   @default("unknown")
+  longTermEffective   Boolean  @default(false)
+  isAdministrator     Boolean  @default(false)
+  visitTimes          Int      @default(0)
+  authenticationType  String   @default("sameDevice")
+  authenticationMode  String   @default("face")
+  validFrom           String?
+  validUntil          String?
   photoData  Bytes?
   photoMimeType String?
   createdAt  DateTime @default(now())

@@ -388,6 +388,81 @@ export async function uploadFaceImage(
   }
 }
 
+export async function captureAndEnrollFingerprint(
+  device: DeviceCredentials,
+  input: { employeeNo: string; fingerNo: number },
+): Promise<void> {
+  if (
+    !Number.isInteger(input.fingerNo) ||
+    input.fingerNo < 1 ||
+    input.fingerNo > 10
+  ) {
+    throw new Error("Fingerprint slot must be between 1 and 10.");
+  }
+
+  const condition = Buffer.from(
+    `<CaptureFingerPrintCond><fingerNo>${input.fingerNo}</fingerNo></CaptureFingerPrintCond>`,
+  );
+  const response = await isapiRequest(
+    device,
+    "/ISAPI/AccessControl/CaptureFingerPrint",
+    {
+      method: "POST",
+      rawBody: new Uint8Array(condition),
+      contentType: "application/xml",
+      timeoutMs: 60_000,
+    },
+  );
+  if (!response.ok) {
+    throw new HikRequestError(
+      `Fingerprint capture failed with HTTP ${response.status}`,
+      response.status,
+      await deviceErrorMessage(response),
+    );
+  }
+
+  const text = await response.text();
+  const parsed = tryParseBody(text);
+  const captured = parsed ? unwrapRoot(parsed) : null;
+  const fingerData =
+    typeof captured?.fingerData === "string" ? captured.fingerData.trim() : "";
+  if (!fingerData) {
+    const details = captured
+      ? [
+          captured.statusString,
+          captured.subStatusCode,
+          captured.errorMsg,
+        ].filter(
+          (value): value is string =>
+            typeof value === "string" && value.length > 0,
+        )
+      : [];
+    throw new HikRequestError(
+      "The terminal did not return a fingerprint template. Place the finger on the device sensor and try again.",
+      response.status,
+      details.join(" / ") || text.slice(0, 200) || null,
+    );
+  }
+
+  await isapiCommand(
+    device,
+    "/ISAPI/AccessControl/FingerPrint/SetUp?format=json",
+    {
+      method: "POST",
+      json: {
+        FingerPrintCfg: {
+          employeeNo: input.employeeNo,
+          enableCardReader: [1],
+          fingerPrintID: input.fingerNo,
+          fingerType: "normalFP",
+          fingerData,
+        },
+      },
+      timeoutMs: 30_000,
+    },
+  );
+}
+
 export async function deleteFaceImage(
   device: DeviceCredentials,
   employeeNo: string,

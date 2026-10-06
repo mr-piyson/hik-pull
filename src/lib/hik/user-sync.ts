@@ -92,12 +92,17 @@ function userInfoPayload(user: ManagedUser) {
       employeeNo: user.employeeNo,
       name: user.name,
       userType: user.userType,
+      floorNumber: user.floorNumber,
+      roomNumber: user.roomNumber,
+      gender: user.gender,
+      numOfUse: user.visitTimes,
       doorRight: "1",
       RightPlan: [{ doorNo: 1, planTemplateNo: "1" }],
-      userVerifyMode: "",
-      localUIRight: false,
+      userVerifyMode:
+        user.authenticationType === "sameDevice" ? "" : user.authenticationMode,
+      localUIRight: user.isAdministrator,
       Valid: {
-        enable: true,
+        enable: !user.longTermEffective,
         beginTime: user.validFrom ? `${user.validFrom}:00` : currentDayStart,
         endTime,
         timeType: "local",
@@ -109,7 +114,7 @@ function userInfoPayload(user: ManagedUser) {
 async function syncPerson(
   device: DeviceRecord,
   user: ManagedUser,
-  previousCardNo: string,
+  previousCardNos: string[],
 ): Promise<void> {
   const userJson = userInfoPayload(user);
   await commandWithAlternate(
@@ -126,11 +131,11 @@ async function syncPerson(
     },
   );
 
-  if (user.cardNo.length > 0) {
+  for (const cardNo of user.cardNos) {
     const cardJson = {
       CardInfo: {
         employeeNo: user.employeeNo,
-        cardNo: user.cardNo,
+        cardNo,
         cardType: "normalCard",
       },
     };
@@ -147,21 +152,11 @@ async function syncPerson(
         json: cardJson,
       },
     );
-    if (previousCardNo && previousCardNo !== user.cardNo) {
-      await isapiCommand(
-        device,
-        "/ISAPI/AccessControl/CardInfo/Delete?format=json",
-        {
-          method: "PUT",
-          json: {
-            CardInfoDelCond: {
-              CardNoList: [{ cardNo: previousCardNo }],
-            },
-          },
-        },
-      );
-    }
-  } else if (previousCardNo.length > 0) {
+  }
+  const removedCards = previousCardNos.filter(
+    (cardNo) => !user.cardNos.includes(cardNo),
+  );
+  if (removedCards.length > 0) {
     await isapiCommand(
       device,
       "/ISAPI/AccessControl/CardInfo/Delete?format=json",
@@ -169,7 +164,7 @@ async function syncPerson(
         method: "PUT",
         json: {
           CardInfoDelCond: {
-            EmployeeNoList: [{ employeeNo: user.employeeNo }],
+            CardNoList: removedCards.map((cardNo) => ({ cardNo })),
           },
         },
       },
@@ -193,7 +188,7 @@ async function removePerson(
       }
     }
   }
-  if (user.cardNo) {
+  if (user.cardNos.length > 0) {
     try {
       await isapiCommand(
         device,
@@ -240,7 +235,7 @@ async function removePerson(
 async function syncAcrossDevices(
   user: ManagedUser,
   operation: SyncOperation,
-  previousCardNo = user.cardNo,
+  previousCardNos = user.cardNos,
   suppliedPhoto?: Uint8Array,
 ): Promise<UserSyncResult[]> {
   const [devices, storedPhoto] = await Promise.all([
@@ -259,7 +254,7 @@ async function syncAcrossDevices(
           await removePerson(device, user, user.photoUrl !== null);
         } else {
           if (operation !== "photo") {
-            await syncPerson(device, user, previousCardNo);
+            await syncPerson(device, user, previousCardNos);
           }
           if (photo) {
             await uploadFaceImage(device, {
@@ -304,20 +299,20 @@ async function syncAcrossDevices(
 export function syncUserToDevices(
   user: ManagedUser,
   operation: Exclude<SyncOperation, "delete" | "photo">,
-  previousCardNo = user.cardNo,
+  previousCardNos = user.cardNos,
 ): Promise<UserSyncResult[]> {
-  return syncAcrossDevices(user, operation, previousCardNo);
+  return syncAcrossDevices(user, operation, previousCardNos);
 }
 
 export function syncUserPhotoToDevices(
   user: ManagedUser,
   photo: Uint8Array<ArrayBuffer>,
 ): Promise<UserSyncResult[]> {
-  return syncAcrossDevices(user, "photo", user.cardNo, photo);
+  return syncAcrossDevices(user, "photo", user.cardNos, photo);
 }
 
 export function deleteUserFromDevices(
   user: ManagedUser,
 ): Promise<UserSyncResult[]> {
-  return syncAcrossDevices(user, "delete", "");
+  return syncAcrossDevices(user, "delete", []);
 }

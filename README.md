@@ -61,7 +61,7 @@ database elsewhere, set `DATABASE_URL` (e.g.
 | Table | Holds |
 | --- | --- |
 | `Device` | One row per terminal: address, credentials, label |
-| `User` | Master directory: employee number, name, card number, user type, validity, optimized face photo |
+| `User` | Master directory: identity, location, person type, validity, up to five cards, authentication settings and optimized face photo |
 | `UserSyncLog` | Per-device success/failure history for every user sync attempt |
 | `LogEvent` | Every access event seen from a device |
 
@@ -69,12 +69,14 @@ Employee numbers are unique in the master directory. Creating, updating,
 deleting, or retrying a user sends the change to all configured devices. A
 terminal failure does not discard the master record: the outcome and error are
 recorded for that device, and the user can be retried from the dashboard.
-Identity, card number, validity, and door rights are synchronized. Each person
-is assigned Door 1 with plan template 1; that plan template must exist and
-allow access on each terminal. Authentication mode inherits the terminal
-setting (`userVerifyMode` is left at its device default).
-Validity date-times are interpreted in the terminal's local time and enabled
-for synced users. Terminals only accept validity dates through
+Person details (including floor, room, gender, administrator flag, visit limit),
+cards, authentication settings, validity, and door rights are synchronized.
+Each person is assigned Door 1 with plan template 1; that plan template must
+exist and allow access on each terminal. Authentication mode can inherit the
+terminal setting or be selected explicitly.
+Validity date-times are interpreted in the terminal's local time. Standard
+validity is enabled unless the person is marked long-term effective. Terminals
+only accept validity dates through
 `2037-12-31 23:59`; later expiration dates are capped to that terminal limit
 when synchronized. A user photo is converted server-side to a JPEG smaller
 than 200 KB (maximum 190 KiB) before it is stored and sent to the terminal's
@@ -82,7 +84,10 @@ than 200 KB (maximum 190 KiB) before it is stored and sent to the terminal's
 Source uploads are limited to 10 MB and 20 megapixels. Face photo enrollment
 requires a face library configured on the device. Successful authentication
 requires the assigned door and plan template to be enabled on that terminal.
-Device/model-specific sync failures are recorded in history.
+Fingerprint enrollment can be triggered from the edit form: choose a device and
+finger slot, then use that device's physical scanner. Fingerprint templates are
+stored on the selected terminal and are not copied to other terminals
+automatically. Device/model-specific sync failures are recorded in history.
 
 `LogEvent` is keyed by `(deviceId, id)`, where `id` is the event id the device
 itself reports. That identity is what makes the two independent ways we learn

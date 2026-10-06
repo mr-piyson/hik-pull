@@ -68,7 +68,7 @@ export async function PATCH(
     throw error;
   }
 
-  const results = await syncUserToDevices(user, "update", current.cardNo);
+  const results = await syncUserToDevices(user, "update", current.cardNos);
   return Response.json({ user, results });
 }
 

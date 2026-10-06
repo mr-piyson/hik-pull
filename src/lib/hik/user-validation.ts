@@ -1,6 +1,11 @@
 import type { ManagedUserInput } from "./user-store";
 import {
+  AUTHENTICATION_MODES,
+  type AuthenticationMode,
+  type AuthenticationType,
+  GENDERS,
   type ManagedUser,
+  type ManagedUserGender,
   type ManagedUserType,
   USER_TYPES,
 } from "./user-types";
@@ -59,6 +64,31 @@ function readString(value: unknown, field: string, maxLength: number): string {
   return result;
 }
 
+function readNonNegativeInteger(
+  value: unknown,
+  field: string,
+  fallback = 0,
+): number {
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > 2_147_483_647) {
+    throw new Error(`${field} must be a whole number of at least 0.`);
+  }
+  return parsed;
+}
+
+function readBoolean(value: unknown, field: string, fallback = false): boolean {
+  if (value === undefined) {
+    return fallback;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(`${field} must be true or false.`);
+  }
+  return value;
+}
+
 function readType(value: unknown): ManagedUserType {
   if (
     typeof value === "string" &&
@@ -66,7 +96,66 @@ function readType(value: unknown): ManagedUserType {
   ) {
     return value as ManagedUserType;
   }
-  throw new Error(`User type must be one of: ${USER_TYPES.join(", ")}.`);
+  throw new Error(`Person type must be one of: ${USER_TYPES.join(", ")}.`);
+}
+
+function readGender(value: unknown): ManagedUserGender {
+  if (
+    typeof value === "string" &&
+    GENDERS.includes(value as ManagedUserGender)
+  ) {
+    return value as ManagedUserGender;
+  }
+  throw new Error(`Gender must be one of: ${GENDERS.join(", ")}.`);
+}
+
+function readAuthenticationType(value: unknown): AuthenticationType {
+  if (value === "sameDevice" || value === "custom") {
+    return value;
+  }
+  throw new Error("Authentication type must be Same as Device or Custom.");
+}
+
+function readAuthenticationMode(value: unknown): AuthenticationMode {
+  if (
+    typeof value === "string" &&
+    AUTHENTICATION_MODES.includes(value as AuthenticationMode)
+  ) {
+    return value as AuthenticationMode;
+  }
+  throw new Error("Choose a supported authentication mode.");
+}
+
+function readCards(payload: Record<string, unknown>): string[] {
+  const values =
+    payload.cardNos === undefined
+      ? payload.cardNo === undefined ||
+        payload.cardNo === null ||
+        payload.cardNo === ""
+        ? []
+        : [payload.cardNo]
+      : payload.cardNos;
+  if (!Array.isArray(values) || values.length > 5) {
+    throw new Error("A person can have at most 5 cards.");
+  }
+  const cards = values
+    .map((value, index) => {
+      if (typeof value !== "string") {
+        throw new Error(`Card ${index + 1} must be text.`);
+      }
+      const card = value.trim();
+      if (card.length > 32) {
+        throw new Error(
+          `Card ${index + 1} must contain at most 32 characters.`,
+        );
+      }
+      return card;
+    })
+    .filter(Boolean);
+  if (new Set(cards).size !== cards.length) {
+    throw new Error("Card numbers must be unique.");
+  }
+  return cards;
 }
 
 export function validateNewUser(value: unknown): ManagedUserInput {
@@ -81,26 +170,38 @@ export function validateNewUser(value: unknown): ManagedUserInput {
     );
   }
   const validFrom = parseOptionalDateTime(payload.validFrom, "Valid from");
+  const longTermEffective = readBoolean(
+    payload.longTermEffective,
+    "Long-term effective",
+  );
   const validUntil = parseOptionalDateTime(payload.validUntil, "Valid until");
-  if (validFrom && validUntil && validFrom >= validUntil) {
+  if (
+    !longTermEffective &&
+    validFrom &&
+    validUntil &&
+    validFrom >= validUntil
+  ) {
     throw new Error("Valid until must be later than valid from.");
   }
-
-  const cardNo =
-    payload.cardNo === undefined || payload.cardNo === null
-      ? ""
-      : typeof payload.cardNo === "string"
-        ? payload.cardNo.trim()
-        : null;
-  if (cardNo === null || cardNo.length > 32) {
-    throw new Error("Card number must be a string of at most 32 characters.");
-  }
+  const authenticationType = readAuthenticationType(
+    payload.authenticationType ?? "sameDevice",
+  );
 
   return {
     employeeNo,
     name: readString(payload.name, "Name", 64),
-    cardNo,
+    cardNos: readCards(payload),
     userType: readType(payload.userType),
+    floorNumber: readNonNegativeInteger(payload.floorNumber, "Floor number"),
+    roomNumber: readNonNegativeInteger(payload.roomNumber, "Room number"),
+    gender: readGender(payload.gender ?? "unknown"),
+    longTermEffective,
+    isAdministrator: readBoolean(payload.isAdministrator, "Administrator"),
+    visitTimes: readNonNegativeInteger(payload.visitTimes, "Visit times"),
+    authenticationType,
+    authenticationMode: readAuthenticationMode(
+      payload.authenticationMode ?? "face",
+    ),
     validFrom,
     validUntil,
   };
@@ -124,8 +225,18 @@ export function validateUserUpdate(
   const merged = validateNewUser({
     employeeNo: current.employeeNo,
     name: payload.name ?? current.name,
-    cardNo: payload.cardNo ?? current.cardNo,
+    cardNos: payload.cardNos ?? current.cardNos,
     userType: payload.userType ?? current.userType,
+    floorNumber: payload.floorNumber ?? current.floorNumber,
+    roomNumber: payload.roomNumber ?? current.roomNumber,
+    gender: payload.gender ?? current.gender,
+    longTermEffective: payload.longTermEffective ?? current.longTermEffective,
+    isAdministrator: payload.isAdministrator ?? current.isAdministrator,
+    visitTimes: payload.visitTimes ?? current.visitTimes,
+    authenticationType:
+      payload.authenticationType ?? current.authenticationType,
+    authenticationMode:
+      payload.authenticationMode ?? current.authenticationMode,
     validFrom:
       payload.validFrom === undefined ? current.validFrom : payload.validFrom,
     validUntil:
@@ -136,8 +247,16 @@ export function validateUserUpdate(
 
   return {
     name: merged.name,
-    cardNo: merged.cardNo,
+    cardNos: merged.cardNos,
     userType: merged.userType,
+    floorNumber: merged.floorNumber,
+    roomNumber: merged.roomNumber,
+    gender: merged.gender,
+    longTermEffective: merged.longTermEffective,
+    isAdministrator: merged.isAdministrator,
+    visitTimes: merged.visitTimes,
+    authenticationType: merged.authenticationType,
+    authenticationMode: merged.authenticationMode,
     validFrom: merged.validFrom,
     validUntil: merged.validUntil,
   };
