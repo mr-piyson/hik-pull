@@ -62,12 +62,8 @@ function nullableText(value: string): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function hasPersonIdentity(event: AccessEvent): boolean {
-  return Boolean(
-    nullableText(event.employeeNo) ||
-      nullableText(event.name) ||
-      nullableText(event.cardNo),
-  );
+function hasCompletePersonIdentity(event: AccessEvent): boolean {
+  return Boolean(nullableText(event.employeeNo) && nullableText(event.name));
 }
 
 type PersonIdentity = {
@@ -86,9 +82,7 @@ function identityFromEvent(event: {
     personName: nullableText(event.name),
     cardNo: nullableText(event.cardNo),
   };
-  return identity.personId || identity.personName || identity.cardNo
-    ? identity
-    : null;
+  return identity.personId && identity.personName ? identity : null;
 }
 
 function eventTimeMs(event: { time: string | null }): number | null {
@@ -114,7 +108,8 @@ async function findNearbyDoorIdentity(
       to: new Date(time + AUTH_EVENT_WINDOW_MS),
     })
   ).filter(
-    (candidate) => candidate.minor === 75 && hasPersonIdentity(candidate),
+    (candidate) =>
+      candidate.minor === 75 && hasCompletePersonIdentity(candidate),
   );
   const nearest = candidates
     .map((candidate) => ({
@@ -215,7 +210,7 @@ export async function recordAttendanceEvents(
     if (event.direction === "in") {
       grants.set(event.id, event);
     }
-    if (event.minor === 75 && hasPersonIdentity(event)) {
+    if (event.minor === 75 && hasCompletePersonIdentity(event)) {
       for (const nearby of await nearbyGrantedEvents(device.id, event)) {
         grants.set(nearby.id, nearby);
       }
@@ -242,6 +237,9 @@ export async function recordAttendanceEvents(
         `[attendance] Could not resolve identity for ${event.deviceId}/${event.id}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+    if (!identity?.personId || !identity.personName) {
+      continue;
+    }
     rows.push({
       id: randomUUID(),
       sourceKey: `${event.deviceId}:${event.id}`,
@@ -249,9 +247,9 @@ export async function recordAttendanceEvents(
       deviceModel: metadata.model,
       deviceSerial: metadata.serial,
       serialNo: parseSerialNo(event.serialNo),
-      personId: identity?.personId ?? null,
-      personName: identity?.personName ?? null,
-      cardNo: identity?.cardNo ?? null,
+      personId: identity.personId,
+      personName: identity.personName,
+      cardNo: identity.cardNo,
       gateDirection: currentDevice.gateDirection,
       dateTime: parseDateTime(event.time),
       timeRaw: event.time,
@@ -273,10 +271,9 @@ export async function recordAttendanceEvents(
           continue;
         }
         if (
-          (row.personId || row.personName || row.cardNo) &&
-          !existing.personId &&
-          !existing.personName &&
-          !existing.cardNo
+          row.personId &&
+          row.personName &&
+          (!existing.personId || !existing.personName)
         ) {
           await tx.attendanceLog.update({
             where: { sourceKey: row.sourceKey },
@@ -304,11 +301,28 @@ export async function listAttendanceLogs(
 }> {
   const [rows, total] = await Promise.all([
     prisma.attendanceLog.findMany({
+      where: {
+        AND: [
+          { personId: { not: null } },
+          { personName: { not: null } },
+          { personId: { not: "" } },
+          { personName: { not: "" } },
+        ],
+      },
       orderBy: [{ dateTime: { sort: "desc", nulls: "last" } }, { id: "desc" }],
       skip: offset,
       take: limit + 1,
     }),
-    prisma.attendanceLog.count(),
+    prisma.attendanceLog.count({
+      where: {
+        AND: [
+          { personId: { not: null } },
+          { personName: { not: null } },
+          { personId: { not: "" } },
+          { personName: { not: "" } },
+        ],
+      },
+    }),
   ]);
   const hasMore = rows.length > limit;
   return {

@@ -122,8 +122,9 @@ deduplicates the same event seen by both ingestion paths. Attendance rows are
 not deleted when a device is removed. Only events classified as granted by the
 current event-code map are included; unrecognized device-specific face codes
 remain unclassified until they can be confirmed. Logs are retained even when
-the device omits person identifiers; identity columns remain nullable, and
-`None` direction does not exclude a successful event.
+the device omits person identifiers in the general event log, but an attendance
+row is created or displayed only when both the person ID and person name are
+present and non-empty. `None` direction does not exclude a successful event.
 If a terminal reports a generic grant with no person fields, the collector
 correlates it with the nearest person-attributed `door opened` event (minor
 code 75) from the same device within 10 seconds. The attendance row retains
