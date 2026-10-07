@@ -17,8 +17,7 @@ export function AccessEventsViewer({
       ? initialDeviceId
       : null,
   );
-  const [reloadToken, setReloadToken] = useState(0);
-  const { stream, events, stop } = useDeviceStream(activeId, reloadToken);
+  const { stream, events, stop, reload } = useDeviceStream(activeId);
   const activeDevice = devices.find((device) => device.id === activeId) ?? null;
 
   return (
@@ -44,7 +43,11 @@ export function AccessEventsViewer({
             onChange={(event) => {
               const nextId = event.target.value || null;
               if (activeId && activeId !== nextId) {
-                void stop().then(() => setActiveId(nextId));
+                void stop().then((stopped) => {
+                  if (stopped) {
+                    setActiveId(nextId);
+                  }
+                });
                 return;
               }
               setActiveId(nextId);
@@ -65,7 +68,7 @@ export function AccessEventsViewer({
             <>
               <button
                 type="button"
-                onClick={() => setReloadToken((value) => value + 1)}
+                onClick={reload}
                 className="rounded-md border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
                 Reload history
@@ -73,7 +76,11 @@ export function AccessEventsViewer({
               <button
                 type="button"
                 onClick={() => {
-                  void stop().then(() => setActiveId(null));
+                  void stop().then((stopped) => {
+                    if (stopped) {
+                      setActiveId(null);
+                    }
+                  });
                 }}
                 className="rounded-md border border-red-300 px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
               >
@@ -89,7 +96,7 @@ export function AccessEventsViewer({
         status={stream.status}
         message={stream.message}
         events={events}
-        onReload={() => setReloadToken((value) => value + 1)}
+        onReload={reload}
       />
     </main>
   );

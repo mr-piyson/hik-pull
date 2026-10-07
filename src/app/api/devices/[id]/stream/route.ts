@@ -1,7 +1,6 @@
 import {
   getState,
   startDevice,
-  stopDevice,
   subscribeEvents,
   subscribeState,
 } from "@/lib/hik/registry";
@@ -14,33 +13,22 @@ export const dynamic = "force-dynamic";
 /**
  * Server-Sent Events for one device.
  *
- * `GET /api/devices/{id}/stream?action=start|stop`
+ * `GET /api/devices/{id}/stream`
  *
- * Opening this endpoint connects to the device; `action=stop` tears the
- * connection down. The device connection is owned by the registry and shared,
- * so several browser tabs observe a single socket rather than each opening
- * their own.
+ * Opening this endpoint connects to the device. The connection is owned by
+ * the registry and shared, so several browser tabs observe a single socket.
  */
 export async function GET(
   request: Request,
   context: RouteContext<"/api/devices/[id]/stream">,
 ) {
+  if (request.signal.aborted) {
+    return new Response(null, { status: 499 });
+  }
   const { id } = await context.params;
   const device = await getDevice(id);
   if (!device) {
     return Response.json({ error: "Device not found." }, { status: 404 });
-  }
-
-  const action = new URL(request.url).searchParams.get("action") ?? "start";
-  if (action === "stop") {
-    stopDevice(id);
-    return Response.json({ ok: true, status: "idle" });
-  }
-  if (action !== "start") {
-    return Response.json(
-      { error: '`action` must be "start" or "stop".' },
-      { status: 400 },
-    );
   }
 
   startDevice(device);

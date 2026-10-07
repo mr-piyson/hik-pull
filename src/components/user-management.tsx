@@ -14,6 +14,7 @@ import {
   USER_TYPES,
   type UserSyncResult,
 } from "@/lib/hik/user-types";
+import { trpc } from "@/trpc/client";
 
 type UserForm = {
   employeeNo: string;
@@ -148,12 +149,9 @@ export function UserManagement({
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/devices", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error("Could not load configured devices.");
-        }
-        const payload = (await response.json()) as { devices: PublicDevice[] };
+    void trpc.devices.list
+      .query()
+      .then((payload) => {
         if (active) {
           setDevices(payload.devices);
           setFingerprintDeviceId(
@@ -193,11 +191,7 @@ export function UserManagement({
   };
 
   const reload = async () => {
-    const response = await fetch("/api/users", { cache: "no-store" });
-    if (!response.ok) {
-      throw new Error("Could not refresh users and sync activity.");
-    }
-    const payload = (await response.json()) as { users: ManagedUser[] };
+    const payload = await trpc.users.list.query();
     setUsers(payload.users);
   };
 
@@ -208,35 +202,20 @@ export function UserManagement({
     setFeedback(null);
     let savedUser: ManagedUser | null = null;
     try {
-      const response = await fetch(
-        editingId ? `/api/users/${editingId}` : "/api/users",
-        {
-          method: editingId ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...form,
-            cardNos: form.cardNos
-              .map((card) => card.value.trim())
-              .filter(Boolean),
-            floorNumber: Number(form.floorNumber),
-            roomNumber: Number(form.roomNumber),
-            visitTimes: Number(form.visitTimes),
-            validFrom: form.validFrom || null,
-            validUntil: form.validUntil || null,
-          }),
-        },
-      );
-      const payload = (await response.json()) as {
-        user?: ManagedUser;
-        results?: UserSyncResult[];
-        error?: string;
+      const data = {
+        ...form,
+        cardNos: form.cardNos.map((card) => card.value.trim()).filter(Boolean),
+        floorNumber: Number(form.floorNumber),
+        roomNumber: Number(form.roomNumber),
+        visitTimes: Number(form.visitTimes),
+        validFrom: form.validFrom || null,
+        validUntil: form.validUntil || null,
       };
-      if (!response.ok || !payload.user) {
-        setError(payload.error ?? "Could not save the user.");
-        return;
-      }
+      const payload = editingId
+        ? await trpc.users.update.mutate({ id: editingId, data })
+        : await trpc.users.create.mutate(data);
       savedUser = payload.user;
-      let message = syncSummary(payload.results ?? []);
+      let message = syncSummary(payload.results);
       if (photoFile) {
         const photoResponse = await fetch(
           `/api/users/${payload.user.id}/photo`,
@@ -298,22 +277,11 @@ export function UserManagement({
       "Waiting for the selected device sensor. Place the person's finger on its reader.",
     );
     try {
-      const response = await fetch(`/api/users/${editingId}/fingerprints`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          deviceId: fingerprintDeviceId,
-          fingerNo: Number(fingerprintNo),
-        }),
+      const payload = await trpc.users.enrollFingerprint.mutate({
+        id: editingId,
+        deviceId: fingerprintDeviceId,
+        fingerNo: Number(fingerprintNo),
       });
-      const payload = (await response.json()) as {
-        ok?: boolean;
-        deviceLabel?: string;
-        error?: string;
-      };
-      if (!response.ok || !payload.ok) {
-        throw new Error(payload.error ?? "Fingerprint enrollment failed.");
-      }
       setFingerprintMessage(
         `Fingerprint ${fingerprintNo} enrolled on ${payload.deviceLabel}. Repeat on each additional device if needed.`,
       );
@@ -340,21 +308,11 @@ export function UserManagement({
     setError(null);
     setFeedback(null);
     try {
-      const response = await fetch(`/api/users/${user.id}`, {
-        method: "DELETE",
-      });
-      const payload = (await response.json()) as {
-        deleted?: boolean;
-        results?: UserSyncResult[];
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not delete the user.");
-      }
+      const payload = await trpc.users.remove.mutate({ id: user.id });
       setFeedback(
         payload.deleted
-          ? `Removed from the master database. ${syncSummary(payload.results ?? [])}`
-          : `Master record retained because at least one device did not confirm deletion. ${syncSummary(payload.results ?? [])} ${payload.results
+          ? `Removed from the master database. ${syncSummary(payload.results)}`
+          : `Master record retained because at least one device did not confirm deletion. ${syncSummary(payload.results)} ${payload.results
               ?.filter((result) => !result.ok)
               .map((result) => `${result.deviceLabel}: ${result.message}`)
               .join(" ")} Retry after resolving the device issue.`,
@@ -381,17 +339,8 @@ export function UserManagement({
     setError(null);
     setFeedback(null);
     try {
-      const response = await fetch(`/api/users/${user.id}/sync`, {
-        method: "POST",
-      });
-      const payload = (await response.json()) as {
-        results?: UserSyncResult[];
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not retry device sync.");
-      }
-      setFeedback(syncSummary(payload.results ?? []));
+      const payload = await trpc.users.sync.mutate({ id: user.id });
+      setFeedback(syncSummary(payload.results));
       await reload();
     } catch (failure) {
       setError(

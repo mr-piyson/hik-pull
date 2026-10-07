@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccessEvent, ConnectionState } from "@/lib/hik/types";
+import { trpc } from "@/trpc/client";
 
 const MAX_ROWS = 2_000;
 
@@ -37,15 +38,18 @@ function toStreamState(state: ConnectionState): DeviceStream {
   };
 }
 
-export function useDeviceStream(deviceId: string | null, reloadToken = 0) {
+export function useDeviceStream(deviceId: string | null) {
   const [stream, setStream] = useState<DeviceStream>(IDLE);
   const [events, setEvents] = useState<AccessEvent[]>([]);
+  const [reloadToken, setReloadToken] = useState(0);
   // Dedupe across backfill + live. The device's `serialNo` is stable for the
   // same physical event, so a backfill that overlaps an already-streamed event
   // collapses to one row instead of showing it twice.
   const seen = useRef(new Set<string>());
   const sourceRef = useRef<EventSource | null>(null);
 
+  // The counter intentionally retriggers history loading when the user asks to reload.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: This state is an explicit effect trigger.
   useEffect(() => {
     if (!deviceId) {
       return;
@@ -64,52 +68,53 @@ export function useDeviceStream(deviceId: string | null, reloadToken = 0) {
     const run = async () => {
       const to = new Date();
       const from = new Date(to.getTime() - 4 * 60 * 60 * 1000);
+      let historyNotice: string | null = null;
       try {
-        const query = new URLSearchParams({
+        const payload = await trpc.events.get.query({
+          id: deviceId,
           from: from.toISOString(),
           to: to.toISOString(),
         });
-        // `t` is a cache-buster. Without it the browser may serve "Reload
-        // history" straight from the HTTP cache and silently show stale rows.
-        query.set("t", String(reloadToken));
-        const response = await fetch(
-          `/api/devices/${deviceId}/events?${query}`,
-        );
         if (cancelled) {
           return;
         }
-        if (response.ok) {
-          const payload = (await response.json()) as { events?: AccessEvent[] };
-          const rows = payload.events ?? [];
-          const fresh: AccessEvent[] = [];
-          for (const event of rows) {
-            if (!seen.current.has(event.id)) {
-              seen.current.add(event.id);
-              fresh.push(event);
-            }
-          }
-          if (!cancelled) {
-            setEvents(fresh.slice(0, MAX_ROWS));
+        const fresh: AccessEvent[] = [];
+        for (const event of payload.events) {
+          if (!seen.current.has(event.id)) {
+            seen.current.add(event.id);
+            fresh.push(event);
           }
         }
-      } catch {
-        // Backfill is best-effort. Live events are what actually matter, so a
-        // failed history query downgrades to a notice rather than an error.
+        if (!cancelled) {
+          setEvents(fresh.slice(0, MAX_ROWS));
+        }
+        if (payload.pullError) {
+          historyNotice = `History search failed: ${payload.pullError}`;
+        }
+      } catch (failure) {
+        historyNotice =
+          failure instanceof Error
+            ? `Could not load event history: ${failure.message}`
+            : "Could not load event history.";
       }
       if (cancelled) {
         return;
       }
+      if (historyNotice) {
+        setStream((previous) => ({ ...previous, message: historyNotice }));
+      }
 
-      const source = new EventSource(
-        `/api/devices/${deviceId}/stream?action=start`,
-      );
+      const source = new EventSource(`/api/devices/${deviceId}/stream`);
       sourceRef.current = source;
 
       source.addEventListener("state", (message) => {
         const state = JSON.parse(
           (message as MessageEvent<string>).data,
         ) as ConnectionState;
-        setStream(toStreamState(state));
+        setStream({
+          ...toStreamState(state),
+          message: historyNotice ?? state.message,
+        });
       });
       source.addEventListener("access", (message) => {
         const event = JSON.parse(
@@ -148,15 +153,30 @@ export function useDeviceStream(deviceId: string | null, reloadToken = 0) {
 
   const stop = useCallback(async () => {
     if (!deviceId) {
-      return;
+      return true;
     }
     sourceRef.current?.close();
     sourceRef.current = null;
-    await fetch(`/api/devices/${deviceId}/stream?action=stop`).catch(
-      () => undefined,
-    );
-    setStream(IDLE);
+    try {
+      await trpc.devices.stopStream.mutate({ id: deviceId });
+      setStream(IDLE);
+      return true;
+    } catch (failure) {
+      setStream({
+        ...IDLE,
+        status: "error",
+        message:
+          failure instanceof Error
+            ? failure.message
+            : "Could not stop the device stream.",
+      });
+      return false;
+    }
   }, [deviceId]);
 
-  return { stream, events, stop };
+  const reload = useCallback(() => {
+    setReloadToken((value) => value + 1);
+  }, []);
+
+  return { stream, events, stop, reload };
 }

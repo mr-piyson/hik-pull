@@ -1,7 +1,7 @@
 import { getDeviceInfo, openAlertStream } from "./client";
 import { recordEvents } from "./event-store";
 import { normalizeLiveChunk } from "./events";
-import { logEvent, logSkipped, logStream } from "./log";
+import { logSkipped, logStream } from "./log";
 import {
   extractBoundary,
   looksLikeXml,
@@ -206,7 +206,7 @@ async function runConnection(
         continue;
       }
       emit(device.id, event);
-      logEvent(device, event);
+      // logEvent(device, event);
       persistEvent(device, event);
     }
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { AttendanceLogEntry } from "@/lib/hik/attendance-store";
+import { trpc } from "@/trpc/client";
 
 type AttendancePage = {
   logs: AttendanceLogEntry[];
@@ -46,15 +47,10 @@ export function AttendanceViewer({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(
-        `/api/attendance?offset=${logs.length}&limit=100`,
-      );
-      const page = (await response.json()) as AttendancePage & {
-        error?: string;
-      };
-      if (!response.ok) {
-        throw new Error(page.error ?? "Could not load attendance logs.");
-      }
+      const page = await trpc.attendance.list.query({
+        offset: logs.length,
+        limit: 100,
+      });
       setLogs((current) => [...current, ...page.logs]);
       setHasMore(page.hasMore);
       setTotal(page.total);

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PublicDevice } from "@/lib/hik/types";
+import { trpc } from "@/trpc/client";
 
 export function DeviceTable({
   devices,
@@ -34,12 +35,7 @@ export function DeviceTable({
     setBusyId(device.id);
     setError(null);
     try {
-      const response = await fetch(`/api/devices/${device.id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        throw new Error("Delete failed");
-      }
+      await trpc.devices.remove.mutate({ id: device.id });
       onRemoved(device.id);
     } catch {
       setError("Could not remove the device.");

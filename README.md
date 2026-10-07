@@ -197,25 +197,25 @@ complete — via `Content-Length` when present, otherwise on a short idle timeou
 
 ## API
 
-| Method | Route | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/devices` | List devices (no passwords) |
-| `POST` | `/api/devices` | Add and validate a device |
-| `PUT` | `/api/devices` | Bulk import |
-| `GET` | `/api/devices/{id}` | Device detail |
-| `PATCH` | `/api/devices/{id}` | Update fields |
-| `DELETE` | `/api/devices/{id}` | Remove device (and its events) |
-| `GET` | `/api/devices/{id}/events` | Event log for a time range |
-| `GET` | `/api/devices/{id}/stream?action=start\|stop` | Control live stream |
-| `GET` | `/api/devices/{id}/stream` | SSE event feed |
-| `GET` | `/api/attendance?offset=0&limit=100` | Page through successful attendance records |
+JSON operations use the typed tRPC endpoint at `/api/trpc`:
 
-`/api/devices/{id}/events` accepts `from`, `to`, `limit`, `direction`
-(`in` \| `denied` \| `door` \| `other`) and `refresh`. Reads always come from
-SQLite, so history opens instantly and survives a restart. The device is
-queried only when `refresh=1`, or when the database has never seen this device
-— pass `refresh=0` to force a database-only read that never touches the
-terminal.
+- `devices.list`, `devices.create`, `devices.import`, `devices.update`, and
+  `devices.remove` manage configured terminals.
+- `devices.stopStream` stops a terminal's shared live connection.
+- `events.get` loads event history for a terminal.
+- `users.list`, `users.get`, `users.create`, `users.update`, `users.remove`,
+  `users.sync`, and `users.enrollFingerprint` manage people and device sync.
+- `attendance.list` pages through successful attendance records.
+
+`events.get` accepts `from`, `to`, `limit`, `direction` (`in` \| `denied` \|
+`door` \| `other`) and `refresh`. Reads always come from SQLite, so history
+opens instantly and survives a restart. The device is queried when `refresh`
+is true, or when the database has never seen this device; set `refresh` to
+false to force a database-only read that never touches the terminal.
+
+The transports that require raw streaming or binary bodies remain HTTP routes:
+`GET /api/devices/{id}/stream` provides the live SSE feed, and
+`GET`/`POST /api/users/{id}/photo` serves and uploads optimized photos.
 
 ## Known limitations
 

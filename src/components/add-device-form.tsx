@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import type { DeviceInfo, PublicDevice } from "@/lib/hik/types";
+import { trpc } from "@/trpc/client";
 
 type FormState = {
   label: string;
@@ -40,40 +41,11 @@ export function AddDeviceForm({
     setBusy(true);
     setError(null);
     try {
-      const response = await fetch("/api/devices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // Password crosses the wire to this app's own server only, over the
-        // same origin. Terminate TLS in front of it in production.
-        body: JSON.stringify({
-          ...form,
-          port: Number(form.port),
-        }),
+      const payload = await trpc.devices.create.mutate({
+        ...form,
+        port: Number(form.port),
       });
-      const payload = (await response.json()) as {
-        device?: PublicDevice;
-        info?: DeviceInfo;
-        error?: string;
-        detail?: string;
-      };
-      if (!response.ok || !payload.device) {
-        setError(
-          payload.detail
-            ? `${payload.error} ${payload.detail}`
-            : (payload.error ?? "Failed."),
-        );
-        return;
-      }
-      onAdded(
-        payload.device,
-        payload.info ?? {
-          deviceName: "",
-          serialNumber: "",
-          model: "",
-          firmwareVersion: "",
-          macAddress: "",
-        },
-      );
+      onAdded(payload.device, payload.info);
       setForm(EMPTY);
       setShowPassword(false);
     } catch {
