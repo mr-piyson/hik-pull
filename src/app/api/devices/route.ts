@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { prisma } from "@/lib/hik/db";
 import { probeDevice } from "@/lib/hik/registry";
 import {
   assertHost,
@@ -51,6 +52,22 @@ export async function POST(request: Request) {
 
   if (device.label.length === 0) {
     device.label = `${device.host}:${device.port}`;
+  }
+
+  // Prevent duplicate devices with the same host (IP address/hostname)
+  try {
+    const existing = await prisma.device.findFirst({
+      where: {
+        host: device.host,
+      },
+    });
+    if (existing) {
+      return badRequest(
+        `A device with host "${device.host}" already exists.`,
+      );
+    }
+  } catch (error) {
+    return badRequest(error instanceof Error ? error.message : String(error));
   }
 
   // Validate against the real device before persisting, so a typo is reported
