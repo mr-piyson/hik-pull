@@ -24,6 +24,7 @@ const deviceInput = z.object({
   port: z.number().optional(),
   username: z.string(),
   password: z.string(),
+  gateDirection: z.enum(["in", "out", "none"]).default("none"),
 });
 
 const importDeviceInput = z.object({
@@ -34,6 +35,7 @@ const importDeviceInput = z.object({
   port: z.number().optional(),
   username: z.string(),
   password: z.string(),
+  gateDirection: z.enum(["in", "out", "none"]).optional(),
   createdAt: z.string().optional(),
 });
 
@@ -56,6 +58,7 @@ function asDevice(input: z.infer<typeof deviceInput>): DeviceRecord {
       port,
       username: assertUsername(input.username),
       password: assertPassword(input.password),
+      gateDirection: input.gateDirection,
       createdAt: new Date().toISOString(),
     };
   } catch (error) {
@@ -117,6 +120,7 @@ export const devicesRouter = router({
             port,
             username: assertUsername(raw.username),
             password: assertPassword(raw.password),
+            gateDirection: raw.gateDirection ?? "none",
             createdAt: raw.createdAt ?? new Date().toISOString(),
           };
         } catch (error) {
@@ -133,6 +137,7 @@ export const devicesRouter = router({
         id: z.string().min(1),
         label: z.string().optional(),
         password: z.string().optional(),
+        gateDirection: z.enum(["in", "out", "none"]).optional(),
       }),
     )
     .mutation(async ({ input }) => {
@@ -147,6 +152,7 @@ export const devicesRouter = router({
       const next = {
         ...device,
         label: input.label === undefined ? device.label : input.label.trim(),
+        gateDirection: input.gateDirection ?? device.gateDirection,
         password:
           input.password && input.password.length > 0
             ? input.password

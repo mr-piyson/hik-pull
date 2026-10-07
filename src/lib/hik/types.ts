@@ -1,4 +1,16 @@
 export type DeviceScheme = "http" | "https";
+export type GateDirection = "in" | "out" | "none";
+
+export function isGateDirection(value: string): value is GateDirection {
+  return value === "in" || value === "out" || value === "none";
+}
+
+export function parseGateDirection(value: string): GateDirection {
+  if (isGateDirection(value)) {
+    return value;
+  }
+  throw new Error(`Unsupported stored gate direction "${value}".`);
+}
 
 export type DeviceCredentials = {
   scheme: DeviceScheme;
@@ -11,6 +23,7 @@ export type DeviceCredentials = {
 export type DeviceRecord = DeviceCredentials & {
   id: string;
   label: string;
+  gateDirection: GateDirection;
   createdAt: string;
 };
 
@@ -23,6 +36,7 @@ export type PublicDevice = {
   port: number;
   username: string;
   hasPassword: boolean;
+  gateDirection: GateDirection;
   createdAt: string;
 };
 
@@ -52,6 +66,8 @@ export type AccessEvent = {
   /** Stable across live + backfill for the same device event, for dedupe. */
   id: string;
   deviceId: string;
+  /** Original API representation, held only until its fields are persisted. */
+  rawPayload?: string;
   /** Device-reported timestamp, ISO-ish. `null` when the device omits it. */
   time: string | null;
   direction: AccessDirection;
@@ -86,6 +102,7 @@ export function toPublicDevice(device: DeviceRecord): PublicDevice {
     port: device.port,
     username: device.username,
     hasPassword: device.password.length > 0,
+    gateDirection: device.gateDirection,
     createdAt: device.createdAt,
   };
 }

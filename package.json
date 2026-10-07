@@ -9,6 +9,7 @@
     "lint": "biome check",
     "format": "biome format --write",
     "db:push": "prisma db push",
+    "db:migrate-event-columns": "bun run scripts/migrate-log-event-columns.mjs",
     "postinstall": "prisma generate",
     "db:studio": "prisma studio"
   },

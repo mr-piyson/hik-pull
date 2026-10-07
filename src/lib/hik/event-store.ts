@@ -1,74 +1,272 @@
+import { Prisma } from "@/generated/prisma/client";
 import { recordAttendanceEvents } from "./attendance-store";
 import { prisma } from "./db";
+import { normalizeHistoryItem, normalizeLiveChunk, unwrapRoot } from "./events";
+import { looksLikeXml, xmlToJson } from "./multipart";
 import type { AccessDirection, AccessEvent, DeviceRecord } from "./types";
-
-/**
- * The event log. Rows are keyed by `(deviceId, id)` — the device's own stable
- * id for that event — so the same physical swipe seen once on the live stream
- * and again by a history search becomes one row instead of two.
- */
 
 /** SQLite caps bound parameters per statement; stay well under it. */
 const INSERT_CHUNK = 200;
 
-function toTimeMs(time: string | null): bigint | null {
-  if (!time) {
-    return null;
+const HISTORY_FIELDS = {
+  major: "major",
+  minor: "minor",
+  time: "time",
+  doorNo: "doorNo",
+  serialNo: "serialNo",
+  currentVerifyMode: "currentVerifyMode",
+  mask: "mask",
+  cardNo: "cardNo",
+  cardType: "cardType",
+  name: "name",
+  cardReaderNo: "cardReaderNo",
+  employeeNoString: "employeeNoString",
+  userType: "userType",
+  pictureURL: "pictureURL",
+  remoteHostAddr: "remoteHostAddr",
+} as const satisfies Record<string, keyof Prisma.LogEventCreateManyInput>;
+
+const FACE_RECT_FIELDS = {
+  height: "faceRectHeight",
+  width: "faceRectWidth",
+  x: "faceRectX",
+  y: "faceRectY",
+} as const satisfies Record<string, keyof Prisma.LogEventCreateManyInput>;
+
+const LIVE_FIELDS = {
+  eventType: "eventType",
+  dateTime: "dateTime",
+  eventState: "eventState",
+  eventDescription: "eventDescription",
+  deviceID: "deviceID",
+  activePostCount: "activePostCount",
+  ipAddress: "ipAddress",
+  remoteHostAddr: "remoteHostAddr",
+  portNo: "portNo",
+  protocol: "protocol",
+  macAddress: "macAddress",
+  channelID: "channelID",
+} as const satisfies Record<string, keyof Prisma.LogEventCreateManyInput>;
+
+const LIVE_ACCESS_FIELDS = {
+  deviceName: "accessDeviceName",
+  majorEventType: "accessMajorEventType",
+  subEventType: "accessSubEventType",
+  cardNo: "accessCardNo",
+  cardType: "accessCardType",
+  name: "accessName",
+  cardReaderKind: "accessCardReaderKind",
+  cardReaderNo: "accessCardReaderNo",
+  doorNo: "accessDoorNo",
+  verifyNo: "accessVerifyNo",
+  employeeNoString: "accessEmployeeNoString",
+  serialNo: "accessSerialNo",
+  userType: "accessUserType",
+  currentVerifyMode: "accessCurrentVerifyMode",
+  currentEvent: "accessCurrentEvent",
+  frontSerialNo: "accessFrontSerialNo",
+  attendanceStatus: "accessAttendanceStatus",
+  label: "accessLabel",
+  statusValue: "accessStatusValue",
+  mask: "accessMask",
+  helmet: "accessHelmet",
+  purePwdVerifyEnable: "accessPurePwdVerifyEnable",
+} as const satisfies Record<string, keyof Prisma.LogEventCreateManyInput>;
+
+type EventRow = Prisma.LogEventGetPayload<Record<string, never>>;
+type EventCreate = Prisma.LogEventCreateManyInput;
+type JsonColumn = Prisma.InputJsonValue | typeof Prisma.JsonNull;
+
+function jsonColumn(value: unknown): JsonColumn {
+  if (value === null) {
+    return Prisma.JsonNull;
   }
-  // `Date.parse` understands the `+03:00` offset these terminals emit, which a
-  // plain string comparison against a UTC bound would not.
-  const parsed = Date.parse(time);
-  return Number.isNaN(parsed) ? null : BigInt(parsed);
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  throw new Error("An API event field has an unsupported non-scalar value.");
 }
 
-type EventRow = {
-  id: string;
-  deviceId: string;
-  time: string | null;
-  timeMs: bigint | null;
-  direction: string;
-  label: string;
-  major: number;
-  minor: number;
-  name: string;
-  employeeNo: string;
-  cardNo: string;
-  readerNo: number | null;
-  serialNo: string | null;
-  source: string;
-};
+function recordValue(
+  record: Record<string, unknown>,
+  key: string,
+  columns: Record<string, JsonColumn>,
+  column: keyof EventCreate,
+): void {
+  if (Object.hasOwn(record, key)) {
+    columns[column] = jsonColumn(record[key]);
+  }
+}
 
-function toAccessEvent(row: EventRow): AccessEvent {
+export function mapApiEventFields(
+  deviceId: string,
+  id: string,
+  source: AccessEvent["source"],
+  rawPayload: string,
+): EventCreate {
+  if (rawPayload === undefined) {
+    throw new Error(`Event ${deviceId}/${id} has no original API payload.`);
+  }
+
+  let value: unknown;
+  try {
+    value = looksLikeXml(rawPayload)
+      ? xmlToJson(rawPayload)
+      : JSON.parse(rawPayload);
+  } catch (error) {
+    throw new Error(
+      `Could not read original API payload for event ${deviceId}/${id}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error(
+      `API payload for event ${deviceId}/${id} is not an object.`,
+    );
+  }
+
+  const payload = unwrapRoot(value as Record<string, unknown>);
+  const columns: Record<string, JsonColumn> = {};
+
+  if (source === "backfill") {
+    for (const [field, column] of Object.entries(HISTORY_FIELDS)) {
+      recordValue(payload, field, columns, column);
+    }
+    const faceRect = payload.FaceRect;
+    if (
+      typeof faceRect === "object" &&
+      faceRect !== null &&
+      !Array.isArray(faceRect)
+    ) {
+      for (const [field, column] of Object.entries(FACE_RECT_FIELDS)) {
+        recordValue(
+          faceRect as Record<string, unknown>,
+          field,
+          columns,
+          column,
+        );
+      }
+    } else if (faceRect !== undefined && faceRect !== null) {
+      throw new Error(`FaceRect on event ${deviceId}/${id} is not an object.`);
+    }
+    const knownFields = new Set([...Object.keys(HISTORY_FIELDS), "FaceRect"]);
+    const unknownFields = Object.keys(payload).filter(
+      (field) => !knownFields.has(field),
+    );
+    if (unknownFields.length > 0) {
+      throw new Error(
+        `Unmapped history API fields on event ${deviceId}/${id}: ${unknownFields.join(", ")}.`,
+      );
+    }
+  } else {
+    for (const [field, column] of Object.entries(LIVE_FIELDS)) {
+      recordValue(payload, field, columns, column);
+    }
+    const accessEvent = payload.AccessControllerEvent;
+    if (
+      typeof accessEvent === "object" &&
+      accessEvent !== null &&
+      !Array.isArray(accessEvent)
+    ) {
+      const access = accessEvent as Record<string, unknown>;
+      for (const [field, column] of Object.entries(LIVE_ACCESS_FIELDS)) {
+        recordValue(access, field, columns, column);
+      }
+      const unknownAccessFields = Object.keys(access).filter(
+        (field) => !Object.hasOwn(LIVE_ACCESS_FIELDS, field),
+      );
+      if (unknownAccessFields.length > 0) {
+        throw new Error(
+          `Unmapped AccessControllerEvent API fields on event ${deviceId}/${id}: ${unknownAccessFields.join(", ")}.`,
+        );
+      }
+    } else if (accessEvent !== undefined && accessEvent !== null) {
+      throw new Error(
+        `AccessControllerEvent on event ${deviceId}/${id} is not an object.`,
+      );
+    }
+    const knownFields = new Set([
+      ...Object.keys(LIVE_FIELDS),
+      "AccessControllerEvent",
+    ]);
+    const unknownFields = Object.keys(payload).filter(
+      (field) => !knownFields.has(field),
+    );
+    if (unknownFields.length > 0) {
+      throw new Error(
+        `Unmapped live API fields on event ${deviceId}/${id}: ${unknownFields.join(", ")}.`,
+      );
+    }
+  }
+
+  // Every dynamic column key comes from the schema-checked API field maps above.
   return {
-    id: row.id,
-    deviceId: row.deviceId,
-    time: row.time,
-    direction: row.direction as AccessDirection,
-    label: row.label,
-    major: row.major,
-    minor: row.minor,
-    name: row.name,
-    employeeNo: row.employeeNo,
-    cardNo: row.cardNo,
-    readerNo: row.readerNo,
-    serialNo: row.serialNo,
-    source: row.source as AccessEvent["source"],
-  };
+    id,
+    deviceId,
+    source,
+    ...columns,
+  } as EventCreate;
+}
+
+function rawValue(row: EventRow, column: keyof EventRow): unknown | undefined {
+  const value = row[column];
+  return value === null ? undefined : value;
+}
+
+function addMappedFields(
+  row: EventRow,
+  payload: Record<string, unknown>,
+  fields: Record<string, keyof EventRow>,
+): void {
+  for (const [field, column] of Object.entries(fields)) {
+    const value = rawValue(row, column);
+    if (value !== undefined) {
+      payload[field] = value;
+    }
+  }
+}
+
+function parseEvent(row: EventRow): AccessEvent {
+  const payload: Record<string, unknown> = {};
+  if (row.source === "backfill") {
+    addMappedFields(row, payload, HISTORY_FIELDS);
+    const faceRect: Record<string, unknown> = {};
+    addMappedFields(row, faceRect, FACE_RECT_FIELDS);
+    if (Object.keys(faceRect).length > 0) {
+      payload.FaceRect = faceRect;
+    }
+    const event = normalizeHistoryItem(row.deviceId, payload);
+    if (!event) {
+      throw new Error(
+        `Stored history API fields for ${row.deviceId}/${row.id} could not be interpreted.`,
+      );
+    }
+    const { rawPayload: _rawPayload, ...displayEvent } = event;
+    return displayEvent;
+  }
+
+  addMappedFields(row, payload, LIVE_FIELDS);
+  const accessEvent: Record<string, unknown> = {};
+  addMappedFields(row, accessEvent, LIVE_ACCESS_FIELDS);
+  if (Object.keys(accessEvent).length > 0) {
+    payload.AccessControllerEvent = accessEvent;
+  }
+  const event = normalizeLiveChunk(row.deviceId, payload);
+  if (!event) {
+    throw new Error(
+      `Stored live API fields for ${row.deviceId}/${row.id} could not be interpreted.`,
+    );
+  }
+  const { rawPayload: _rawPayload, ...displayEvent } = event;
+  return displayEvent;
 }
 
 /**
- * Store events, keeping whichever copy of a duplicate arrived first. Returns
- * how many rows were genuinely new.
- *
- * Duplicates are expected and normal: the stream's replay buffer overlaps the
- * history search, and reconnects re-deliver whatever the device still holds.
- * Losing a write would mean losing an event forever, so this never deletes or
- * overwrites.
- *
- * SQLite rejects Prisma's `skipDuplicates`, so the existing ids are read and
- * the new rows inserted inside one transaction — the read and the write have to
- * be atomic, or a live event arriving during a backfill could make the whole
- * insert fail on the unique constraint.
+ * Persist each original API event field in its own column. Derived display
+ * fields are computed for clients and attendance, not stored in LogEvent.
  */
 export async function recordEvents(
   events: AccessEvent[],
@@ -77,23 +275,19 @@ export async function recordEvents(
   if (events.length === 0) {
     return 0;
   }
-
-  const rows = events.map((event) => ({
-    id: event.id,
-    deviceId: event.deviceId,
-    time: event.time,
-    timeMs: toTimeMs(event.time),
-    direction: event.direction,
-    label: event.label,
-    major: event.major,
-    minor: event.minor,
-    name: event.name,
-    employeeNo: event.employeeNo,
-    cardNo: event.cardNo,
-    readerNo: event.readerNo,
-    serialNo: event.serialNo,
-    source: event.source,
-  }));
+  const rows = events.map((event) => {
+    if (event.rawPayload === undefined) {
+      throw new Error(
+        `Event ${event.deviceId}/${event.id} has no original API payload.`,
+      );
+    }
+    return mapApiEventFields(
+      device.id,
+      event.id,
+      event.source,
+      event.rawPayload,
+    );
+  });
 
   let inserted = 0;
   for (let index = 0; index < rows.length; index += INSERT_CHUNK) {
@@ -109,14 +303,12 @@ export async function recordEvents(
   return inserted;
 }
 
-async function storeChunk(chunk: EventRow[]): Promise<number> {
-  // Grouped by device: the existence check below is scoped to one device,
-  // because `id` is only unique within a device.
-  const byDevice = new Map<string, Map<string, EventRow>>();
+async function storeChunk(chunk: EventCreate[]): Promise<number> {
+  const byDevice = new Map<string, Map<string, EventCreate>>();
   for (const row of chunk) {
     let rows = byDevice.get(row.deviceId);
     if (!rows) {
-      rows = new Map<string, EventRow>();
+      rows = new Map();
       byDevice.set(row.deviceId, rows);
     }
     rows.set(row.id, row);
@@ -157,30 +349,55 @@ export type EventQuery = {
   limit?: number;
 };
 
-export async function queryEvents(query: EventQuery): Promise<AccessEvent[]> {
-  const where = {
-    deviceId: query.deviceId,
-    ...(query.direction ? { direction: query.direction } : {}),
-    ...(query.from || query.to
-      ? {
-          timeMs: {
-            ...(query.from ? { gte: BigInt(query.from.getTime()) } : {}),
-            ...(query.to ? { lte: BigInt(query.to.getTime()) } : {}),
-          },
-        }
-      : {}),
-  };
+export async function getEvent(
+  deviceId: string,
+  id: string,
+): Promise<AccessEvent | null> {
+  const row = await prisma.logEvent.findUnique({
+    where: { deviceId_id: { deviceId, id } },
+  });
+  return row ? parseEvent(row) : null;
+}
 
+export async function queryEvents(query: EventQuery): Promise<AccessEvent[]> {
   const rows = await prisma.logEvent.findMany({
-    where,
-    // Newest first, which is what anyone wants when opening a log. Events the
-    // device never timestamped sort last rather than first.
-    orderBy: [
-      { timeMs: { sort: "desc", nulls: "last" } },
-      { receivedAt: "desc" },
-    ],
-    take: query.limit,
+    where: { deviceId: query.deviceId },
+    orderBy: { receivedAt: "desc" },
+  });
+  const from = query.from?.getTime();
+  const to = query.to?.getTime();
+  const events = rows
+    .map((row) => ({ row, event: parseEvent(row) }))
+    .filter(({ event }) => {
+      if (query.direction && event.direction !== query.direction) {
+        return false;
+      }
+      const time = event.time ? Date.parse(event.time) : Number.NaN;
+      if (from !== undefined && (!Number.isFinite(time) || time < from)) {
+        return false;
+      }
+      if (to !== undefined && (!Number.isFinite(time) || time > to)) {
+        return false;
+      }
+      return true;
+    });
+
+  events.sort((left, right) => {
+    const leftTime = left.event.time ? Date.parse(left.event.time) : Number.NaN;
+    const rightTime = right.event.time
+      ? Date.parse(right.event.time)
+      : Number.NaN;
+    if (Number.isFinite(leftTime) && Number.isFinite(rightTime)) {
+      return rightTime - leftTime;
+    }
+    if (Number.isFinite(leftTime)) {
+      return -1;
+    }
+    if (Number.isFinite(rightTime)) {
+      return 1;
+    }
+    return right.row.receivedAt.getTime() - left.row.receivedAt.getTime();
   });
 
-  return rows.map(toAccessEvent);
+  return events.slice(0, query.limit).map(({ event }) => event);
 }

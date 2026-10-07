@@ -10,75 +10,111 @@ datasource db {
 }
 
 model Device {
-  id        String   @id
+  id        String @id
   label     String
   /// "http" | "https" — SQLite has no enums, so validated in code.
-  scheme    String   @default("http")
+  scheme    String @default("http")
   host      String
-  port      Int      @default(80)
+  port      Int    @default(80)
   username  String
   /// Plaintext, same as it always was in `.data/devices.json`. The app runs on
   /// a LAN with no users or TLS, so this is not a downgrade. Never returned by
   /// any API — see `toPublicDevice`.
-  password  String   @default("")
+  password  String @default("")
   createdAt String
 
+  /// Role assigned to successful attendance events recorded at this terminal.
+  gateDirection String @default("none")
+  lastHistorySyncAt DateTime?
   deviceModel  String?
   deviceSerial String?
 
-  events LogEvent[]
+  events   LogEvent[]
   syncLogs UserSyncLog[]
 
   @@index([host])
 }
 
-/// One access-control event. `deviceId + id` is the identity: `id` is stable
-/// for a given event on a given device but only unique within that device.
+/// API event fields are persisted in separate columns, using the original
+/// property names (and dotted paths for nested entities). Display-only values
+/// are derived when reading.
 model LogEvent {
-  /// The device's stable event id (serial number, or a time/card derived key).
-  id       String
-  deviceId String
+  /// Internal identity used to deduplicate live and history copies.
+  id       String @map("_event_id")
+  deviceId String @map("_device_id")
 
-  /// Device-reported timestamp, kept verbatim (including its timezone offset)
-  /// so what is shown is exactly what the terminal said. Display only.
-  time String?
+  /// Fields from `/ISAPI/AccessControl/AcsEvent`.
+  major             Json?
+  minor             Json?
+  time              Json?
+  doorNo            Json?
+  serialNo          Json?
+  currentVerifyMode Json?
+  mask              Json?
+  cardNo            Json?
+  cardType          Json?
+  name              Json?
+  cardReaderNo      Json?
+  employeeNoString  Json?
+  userType          Json?
+  pictureURL        Json?
+  faceRectHeight    Json? @map("FaceRect.height")
+  faceRectWidth     Json? @map("FaceRect.width")
+  faceRectX         Json? @map("FaceRect.x")
+  faceRectY         Json? @map("FaceRect.y")
 
-  /// Epoch milliseconds parsed from `time`, used for range filters and
-  /// ordering. The verbatim `time` string carries a local offset, so it cannot
-  /// be compared against the UTC bounds the client sends. `null` when the
-  /// device omitted a usable timestamp.
-  timeMs BigInt?
+  /// Top-level fields from `/ISAPI/Event/notification/alertStream`.
+  eventType        Json?
+  dateTime         Json?
+  eventState       Json?
+  eventDescription Json?
+  deviceID         Json?
+  activePostCount  Json?
+  ipAddress        Json?
+  remoteHostAddr   Json?
+  portNo           Json?
+  protocol         Json?
+  macAddress       Json?
+  channelID        Json?
 
-  /// "in" | "denied" | "door" | "other"
-  direction String
-  /// Human label for the minor code, e.g. "fingerprint invalid".
-  label String
-  major Int
-  minor Int
+  /// Fields from the nested `AccessControllerEvent` entity.
+  accessDeviceName          Json? @map("AccessControllerEvent.deviceName")
+  accessMajorEventType      Json? @map("AccessControllerEvent.majorEventType")
+  accessSubEventType        Json? @map("AccessControllerEvent.subEventType")
+  accessCardNo              Json? @map("AccessControllerEvent.cardNo")
+  accessCardType            Json? @map("AccessControllerEvent.cardType")
+  accessName                Json? @map("AccessControllerEvent.name")
+  accessCardReaderKind      Json? @map("AccessControllerEvent.cardReaderKind")
+  accessCardReaderNo        Json? @map("AccessControllerEvent.cardReaderNo")
+  accessDoorNo              Json? @map("AccessControllerEvent.doorNo")
+  accessVerifyNo            Json? @map("AccessControllerEvent.verifyNo")
+  accessEmployeeNoString    Json? @map("AccessControllerEvent.employeeNoString")
+  accessSerialNo            Json? @map("AccessControllerEvent.serialNo")
+  accessUserType            Json? @map("AccessControllerEvent.userType")
+  accessCurrentVerifyMode   Json? @map("AccessControllerEvent.currentVerifyMode")
+  accessCurrentEvent        Json? @map("AccessControllerEvent.currentEvent")
+  accessFrontSerialNo       Json? @map("AccessControllerEvent.frontSerialNo")
+  accessAttendanceStatus    Json? @map("AccessControllerEvent.attendanceStatus")
+  accessLabel               Json? @map("AccessControllerEvent.label")
+  accessStatusValue         Json? @map("AccessControllerEvent.statusValue")
+  accessMask                Json? @map("AccessControllerEvent.mask")
+  accessHelmet              Json? @map("AccessControllerEvent.helmet")
+  accessPurePwdVerifyEnable Json? @map("AccessControllerEvent.purePwdVerifyEnable")
 
-  name       String @default("")
-  employeeNo String @default("")
-  cardNo     String @default("")
-  readerNo   Int?
-  serialNo   String?
-
-  /// "live" | "backfill"
+  /// Internal transport metadata, not a field from the API event.
   source String
 
-  /// When *we* learned about it, for stable server-side ordering of events
-  /// that share a device timestamp.
+  /// When we received this copy; used to order rows with missing event times.
   receivedAt DateTime @default(now())
 
   device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
 
   @@id([deviceId, id])
-  @@index([deviceId, timeMs])
-  @@index([deviceId, direction])
-  @@index([receivedAt])
+  @@index([deviceId, receivedAt])
 }
 
-/// Successful person-authentication events, retained independently of devices
-/// and the general access-event log.
+/// Successful authentication events, retained independently of devices and
+/// the general access-event log.
 model AttendanceLog {
   id           String    @id
   deviceIp     String?   @map("device_ip")
@@ -88,6 +124,7 @@ model AttendanceLog {
   personId     String?   @map("person_id")
   personName   String?   @map("person_name")
   cardNo       String?   @map("card_no")
+  gateDirection String   @default("none") @map("gate_direction")
   dateTime     DateTime? @map("datetime")
   timeRaw      String?   @map("time_raw")
 
@@ -97,32 +134,33 @@ model AttendanceLog {
 
   @@index([dateTime])
   @@index([personId, dateTime])
+  @@index([gateDirection, dateTime])
   @@map("attendance_logs")
 }
 
 /// Master user records maintained by this application and synchronized to
 /// each configured terminal. Date-time strings are local terminal times.
 model User {
-  id                  String   @id
-  employeeNo          String   @unique
-  name                String
-  cardNo              String   @default("")
-  cardNosJson         String   @default("[]")
-  userType            String   @default("normal")
-  floorNumber         Int      @default(0)
-  roomNumber          Int      @default(0)
-  gender              String   @default("unknown")
-  longTermEffective   Boolean  @default(false)
-  isAdministrator     Boolean  @default(false)
-  visitTimes          Int      @default(0)
-  authenticationType  String   @default("sameDevice")
-  authenticationMode  String   @default("face")
-  validFrom           String?
-  validUntil          String?
-  photoData  Bytes?
-  photoMimeType String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                 String   @id
+  employeeNo         String   @unique
+  name               String
+  cardNo             String   @default("")
+  cardNosJson        String   @default("[]")
+  userType           String   @default("normal")
+  floorNumber        Int      @default(0)
+  roomNumber         Int      @default(0)
+  gender             String   @default("unknown")
+  longTermEffective  Boolean  @default(false)
+  isAdministrator    Boolean  @default(false)
+  visitTimes         Int      @default(0)
+  authenticationType String   @default("sameDevice")
+  authenticationMode String   @default("face")
+  validFrom          String?
+  validUntil         String?
+  photoData          Bytes?
+  photoMimeType      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   syncLogs UserSyncLog[]
 

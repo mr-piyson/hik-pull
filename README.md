@@ -44,7 +44,8 @@ npm run start
 ```
 
 Open the multi-page dashboard to manage devices, people, access events, and
-sync history separately. Add a device with its host/port/username/password;
+sync history separately. Add a device with its host/port/username/password and
+attendance direction (`In`, `Out`, or `None`);
 the credentials are validated immediately by fetching
 `/ISAPI/System/deviceInfo`.
 
@@ -65,7 +66,7 @@ database elsewhere, set `DATABASE_URL` (e.g.
 | `User` | Master directory: identity, location, person type, validity, up to five cards, authentication settings and optimized face photo |
 | `UserSyncLog` | Per-device success/failure history for every user sync attempt |
 | `LogEvent` | Every access event seen from a device |
-| `AttendanceLog` (`attendance_logs`) | Successful person authentications, including device and original timestamp details |
+| `AttendanceLog` (`attendance_logs`) | Successful authentication events, including device direction and original timestamp details |
 
 Employee numbers are unique in the master directory. Creating, updating,
 deleting, or retrying a user sends the change to all configured devices. A
@@ -91,16 +92,17 @@ finger slot, then use that device's physical scanner. Fingerprint templates are
 stored on the selected terminal and are not copied to other terminals
 automatically. Device/model-specific sync failures are recorded in history.
 
-`LogEvent` is keyed by `(deviceId, id)`, where `id` is the event id the device
-itself reports. That identity is what makes the two independent ways we learn
-about an event — the live stream and the history search — collapse into one row
-instead of two. Rows are only ever inserted; a duplicate never overwrites.
+`LogEvent` stores each event API property in its own column, including fields
+from the nested `AccessControllerEvent` and `FaceRect` entities. Values retain
+their API JSON types. Display labels and classifications are derived when
+events are read, not written into the table. Internal event identity and
+source metadata deduplicate overlapping live and history copies; duplicate
+rows never overwrite the original values.
 
-`time` is stored exactly as the terminal wrote it, including its `+03:00`
-offset, because that is what gets displayed. `timeMs` is the same instant as
-epoch milliseconds, used for range filters and ordering: the verbatim string
-carries a local offset and so cannot be compared against the UTC bounds the
-browser sends.
+When upgrading a database that has the previous `apiData` event column, run
+`npm run db:migrate-event-columns` to copy its API fields into dedicated
+columns without dropping event rows, then run `npm run db:push`. The migration
+only changes `LogEvent`; the other tables and their rows are preserved.
 
 Deleting a device cascades to its events.
 
@@ -110,24 +112,38 @@ connection that falls behind, and losing that costs far more events than one
 failed insert.
 
 Successful authentications are copied from both live events and history
-backfills to `attendance_logs`. The saved fields are device address
-(`host:port`), model, serial, event serial number, person ID/name, card number,
-parsed date-time, and the original device timestamp. A private event key
+backfills to the single indexed `attendance_logs` table. Each row stores the
+device address (`host:port`), model, serial, event serial number, person
+ID/name, card number, parsed date-time, original device timestamp, and the
+device's `In`, `Out`, or `None` gate direction when that event was recorded.
+The gate direction is a snapshot: changing a device's setting affects future
+events and does not rewrite historical attendance. A private event key
 deduplicates the same event seen by both ingestion paths. Attendance rows are
 not deleted when a device is removed. Only events classified as granted by the
 current event-code map are included; unrecognized device-specific face codes
-remain unclassified until they can be confirmed.
-Attendance requires at least one person identifier (employee number, name, or
-card number). If a terminal reports a generic grant with no person fields, the
-collector correlates it with the nearest person-attributed `door opened` event
-(minor code 75) from the same device within 10 seconds. The attendance row
-retains the grant event's serial and timestamp and takes identity from the
-correlated door event. Old anonymous rows are repaired when attendance is read
-if their matching access events are present; unresolved anonymous rows are not
-shown.
+remain unclassified until they can be confirmed. Logs are retained even when
+the device omits person identifiers; identity columns remain nullable, and
+`None` direction does not exclude a successful event.
+If a terminal reports a generic grant with no person fields, the collector
+correlates it with the nearest person-attributed `door opened` event (minor
+code 75) from the same device within 10 seconds. The attendance row retains
+the grant event's serial and timestamp and takes identity from the correlated
+door event.
 Collection happens while a device live stream is running or when its event
 history is pulled from the Access events page; the attendance page displays
 saved records and does not start device connections on its own.
+
+All months share this one table rather than dynamically created monthly
+tables. `dateTime` is indexed for month/date queries, and `gateDirection` is
+available directly on each row for downstream attendance processing.
+
+The Node.js server starts a daily history backfill shortly after startup, then
+repeats it every 24 hours. Each device keeps a successful-sync checkpoint; the
+job overlaps the prior checkpoint by five minutes to catch delayed device
+events, and retries a failed range without advancing the checkpoint. The first
+run imports the preceding 24 hours. The scheduler runs once per Node.js server
+process; if deploying multiple app instances, expect duplicate device queries
+(stored events remain deduplicated) or use a single app instance.
 
 Useful commands:
 

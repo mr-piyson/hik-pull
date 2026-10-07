@@ -65,6 +65,13 @@ export function DeviceManagement({
               previous.filter((device) => device.id !== id),
             );
           }}
+          onDirectionChanged={(id, gateDirection) => {
+            setDevices((previous) =>
+              previous.map((device) =>
+                device.id === id ? { ...device, gateDirection } : device,
+              ),
+            );
+          }}
         />
       </section>
     </main>

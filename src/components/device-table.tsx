@@ -1,7 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import type { PublicDevice } from "@/lib/hik/types";
+import {
+  type GateDirection,
+  isGateDirection,
+  type PublicDevice,
+} from "@/lib/hik/types";
 import { trpc } from "@/trpc/client";
 
 export function DeviceTable({
@@ -11,6 +15,7 @@ export function DeviceTable({
   onSelect,
   onStop,
   onRemoved,
+  onDirectionChanged,
 }: {
   devices: PublicDevice[];
   activeId: string | null;
@@ -21,9 +26,33 @@ export function DeviceTable({
   onSelect: (device: PublicDevice) => void;
   onStop: () => void;
   onRemoved: (id: string) => void;
+  onDirectionChanged: (id: string, direction: GateDirection) => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const updateDirection = async (
+    device: PublicDevice,
+    gateDirection: GateDirection,
+  ) => {
+    setBusyId(device.id);
+    setError(null);
+    try {
+      await trpc.devices.update.mutate({
+        id: device.id,
+        gateDirection,
+      });
+      onDirectionChanged(device.id, gateDirection);
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not update the device attendance direction.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const remove = async (device: PublicDevice) => {
     const confirmed = window.confirm(
@@ -69,6 +98,9 @@ export function DeviceTable({
             <th scope="col" className="px-3 py-2">
               Model / firmware
             </th>
+            <th scope="col" className="px-3 py-2">
+              Attendance direction
+            </th>
             <th scope="col" className="px-3 py-2 text-right">
               Actions
             </th>
@@ -112,6 +144,24 @@ export function DeviceTable({
                   ) : (
                     "-"
                   )}
+                </td>
+                <td className="px-3 py-2">
+                  <select
+                    value={device.gateDirection}
+                    disabled={busyId === device.id}
+                    onChange={(event) => {
+                      const direction = event.target.value;
+                      if (isGateDirection(direction)) {
+                        void updateDirection(device, direction);
+                      }
+                    }}
+                    aria-label={`Attendance direction for ${device.label}`}
+                    className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950"
+                  >
+                    <option value="in">In</option>
+                    <option value="out">Out</option>
+                    <option value="none">None</option>
+                  </select>
                 </td>
                 <td className="px-3 py-2 text-right">
                   <div className="flex justify-end gap-2">

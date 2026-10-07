@@ -124,6 +124,9 @@ export function AttendanceViewer({
                   Card no
                 </th>
                 <th scope="col" className="px-4 py-3">
+                  Attendance direction
+                </th>
+                <th scope="col" className="px-4 py-3">
                   Date/time
                 </th>
                 <th scope="col" className="px-4 py-3">
@@ -154,6 +157,7 @@ export function AttendanceViewer({
                   <td className="px-4 py-3 font-mono text-xs">
                     {display(log.cardNo)}
                   </td>
+                  <td className="px-4 py-3 capitalize">{log.gateDirection}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-xs">
                     {displayDateTime(log.dateTime)}
                   </td>
@@ -165,7 +169,7 @@ export function AttendanceViewer({
               {logs.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={10}
                     className="px-4 py-12 text-center text-sm text-zinc-500 dark:text-zinc-400"
                   >
                     No successful authentication records have been collected

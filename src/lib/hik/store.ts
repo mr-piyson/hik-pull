@@ -1,5 +1,9 @@
 import { prisma } from "./db";
-import type { DeviceRecord, DeviceScheme } from "./types";
+import {
+  type DeviceRecord,
+  type DeviceScheme,
+  parseGateDirection,
+} from "./types";
 
 /**
  * Device records live in SQLite now (they used to be a JSON file in
@@ -19,6 +23,7 @@ type DeviceRow = {
   port: number;
   username: string;
   password: string;
+  gateDirection: string;
   createdAt: string;
 };
 
@@ -31,6 +36,7 @@ function toRecord(row: DeviceRow): DeviceRecord {
     port: row.port,
     username: row.username,
     password: row.password,
+    gateDirection: parseGateDirection(row.gateDirection),
     createdAt: row.createdAt,
   };
 }
@@ -82,6 +88,7 @@ export async function saveDevice(
     port: device.port,
     username: device.username,
     password: device.password,
+    gateDirection: device.gateDirection,
     createdAt: device.createdAt,
     ...(metadata
       ? {

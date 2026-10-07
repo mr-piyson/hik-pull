@@ -1,7 +1,12 @@
 "use client";
 
 import { type FormEvent, useState } from "react";
-import type { DeviceInfo, PublicDevice } from "@/lib/hik/types";
+import {
+  type DeviceInfo,
+  type GateDirection,
+  isGateDirection,
+  type PublicDevice,
+} from "@/lib/hik/types";
 import { trpc } from "@/trpc/client";
 
 type FormState = {
@@ -11,6 +16,7 @@ type FormState = {
   scheme: "http" | "https";
   username: string;
   password: string;
+  gateDirection: GateDirection;
 };
 
 const EMPTY: FormState = {
@@ -20,6 +26,7 @@ const EMPTY: FormState = {
   scheme: "http",
   username: "admin",
   password: "",
+  gateDirection: "none",
 };
 
 export function AddDeviceForm({
@@ -89,6 +96,26 @@ export function AddDeviceForm({
           placeholder="Front door"
           className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-950"
         />
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="font-medium text-zinc-700 dark:text-zinc-200">
+          Attendance direction
+        </span>
+        <select
+          value={form.gateDirection}
+          onChange={(event) => {
+            const direction = event.target.value;
+            if (isGateDirection(direction)) {
+              update("gateDirection", direction);
+            }
+          }}
+          className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-950"
+        >
+          <option value="in">In</option>
+          <option value="out">Out</option>
+          <option value="none">None</option>
+        </select>
       </label>
 
       <label className="flex flex-col gap-1 text-sm">

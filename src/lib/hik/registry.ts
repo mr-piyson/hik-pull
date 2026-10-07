@@ -84,9 +84,10 @@ function emit(deviceId: string, event: AccessEvent): void {
   const entry = entryFor(deviceId);
   entry.state.eventsReceived += 1;
   entry.state.lastEventAt = new Date().toISOString();
+  const { rawPayload: _rawPayload, ...displayEvent } = event;
   for (const listener of entry.listeners) {
     try {
-      listener(event);
+      listener(displayEvent);
     } catch {
       // One broken SSE consumer must not tear down the device connection.
     }
@@ -200,7 +201,9 @@ async function runConnection(
         break;
       }
       const payload = parsePayload(part.body);
-      const event = payload ? normalizeLiveChunk(device.id, payload) : null;
+      const event = payload
+        ? normalizeLiveChunk(device.id, payload, part.body)
+        : null;
       if (!event) {
         logSkipped(device, part.headers["content-type"], part.body, payload);
         continue;

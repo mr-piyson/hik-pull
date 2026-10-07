@@ -132,6 +132,7 @@ function asNumber(value: unknown): number | null {
 export function normalizeLiveChunk(
   deviceId: string,
   payload: Record<string, unknown>,
+  rawPayload = JSON.stringify(payload),
 ): AccessEvent | null {
   const chunk = unwrapRoot(payload);
   if (chunk.eventType !== "AccessControllerEvent") {
@@ -156,6 +157,7 @@ export function normalizeLiveChunk(
     id:
       serialNo || `${deviceId}:${time ?? ""}:${minor}:${asString(raw.cardNo)}`,
     deviceId,
+    rawPayload,
     time,
     direction: classify(major, minor),
     label: labelForMinor(minor),
@@ -189,6 +191,7 @@ export function normalizeHistoryItem(
   return {
     id: serialNo,
     deviceId,
+    rawPayload: JSON.stringify(item),
     time: asString(item.time) || null,
     direction: classify(major, minor),
     label: labelForMinor(minor),
