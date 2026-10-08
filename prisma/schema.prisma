@@ -35,6 +35,26 @@ model Device {
   @@index([host])
 }
 
+/// Persistent singleton for operator-configurable collection and display
+/// behavior. SQLite has no singleton constraints, so code uses the fixed id.
+model AppSettings {
+  id                       String  @id @default("global")
+  autoStartLiveStreams     Boolean @default(true)
+  historySyncEnabled       Boolean @default(true)
+  historySyncIntervalHours Int     @default(24)
+  historyStartupDelaySecs  Int     @default(60)
+  historyLookbackHours     Int     @default(24)
+  historyOverlapMinutes    Int     @default(5)
+  historyBatchSize         Int     @default(500)
+  reconnectBaseSeconds     Int     @default(1)
+  reconnectMaxSeconds      Int     @default(30)
+  attendanceRefreshSeconds Int     @default(10)
+  facePhotoTargetKB        Int     @default(190)
+  maxPhotoUploadMB         Int     @default(10)
+
+  @@map("app_settings")
+}
+
 /// API event fields are persisted in separate columns, using the original
 /// property names (and dotted paths for nested entities). Display-only values
 /// are derived when reading.
@@ -113,8 +133,8 @@ model LogEvent {
   @@index([deviceId, receivedAt])
 }
 
-/// Successful authentication events, retained independently of devices and
-/// the general access-event log.
+/// Events containing person data, retained independently of devices and the
+/// general access-event log.
 model AttendanceLog {
   id           String    @id
   deviceIp     String?   @map("device_ip")

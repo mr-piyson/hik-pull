@@ -34,8 +34,10 @@ function displayDateTime(value: string | null): string {
 
 export function AttendanceViewer({
   initialPage,
+  refreshSeconds,
 }: {
   initialPage: AttendancePage;
+  refreshSeconds: number;
 }) {
   const [logs, setLogs] = useState(initialPage.logs);
   const [hasMore, setHasMore] = useState(initialPage.hasMore);
@@ -78,9 +80,9 @@ export function AttendanceViewer({
   useEffect(() => {
     const interval = setInterval(() => {
       void refresh();
-    }, 10_000);
+    }, refreshSeconds * 1_000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [refresh, refreshSeconds]);
 
   const loadMore = async () => {
     setLoading(true);
@@ -139,7 +141,7 @@ export function AttendanceViewer({
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
             {lastUpdated
               ? `Updated ${lastUpdated.toLocaleTimeString()}`
-              : "Auto-refreshes every 10 seconds"}
+              : `Auto-refreshes every ${refreshSeconds} seconds`}
           </span>
         </div>
         <div className="overflow-x-auto">

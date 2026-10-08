@@ -297,7 +297,7 @@ export async function recordEvents(
     await recordAttendanceEvents(device, events);
   } catch (error) {
     console.error(
-      `[attendance] Could not save successful authentication events for ${device.host}:${device.port}: ${error instanceof Error ? error.message : String(error)}`,
+      `[attendance] Could not save events with person data for ${device.host}:${device.port}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
   return inserted;

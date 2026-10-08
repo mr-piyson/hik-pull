@@ -8,6 +8,7 @@ import {
   parseMultipart,
   xmlToJson,
 } from "./multipart";
+import { DEFAULT_APP_SETTINGS, getAppSettings } from "./settings-store";
 import type { AccessEvent, ConnectionState, DeviceRecord } from "./types";
 
 type EventListener = (event: AccessEvent) => void;
@@ -22,9 +23,6 @@ type Connection = {
   /** Retained so `stopDevice` can identify the device in its log line. */
   device: DeviceRecord | null;
 };
-
-const RECONNECT_BASE_MS = 1_000;
-const RECONNECT_MAX_MS = 30_000;
 
 const INITIAL_STATE: ConnectionState = {
   status: "idle",
@@ -68,6 +66,10 @@ function entryFor(deviceId: string): Connection {
   return entry;
 }
 
+function isIdle(entry: Connection): boolean {
+  return entry.state.status === "idle";
+}
+
 function publish(deviceId: string, patch: Partial<ConnectionState>): void {
   const entry = entryFor(deviceId);
   entry.state = {
@@ -94,10 +96,23 @@ function emit(deviceId: string, event: AccessEvent): void {
   }
 }
 
-function backoffDelay(attempt: number): number {
+async function backoffDelay(
+  attempt: number,
+  device: DeviceRecord,
+): Promise<number> {
+  let settings = DEFAULT_APP_SETTINGS;
+  try {
+    settings = await getAppSettings();
+  } catch (error) {
+    logStream(
+      device,
+      "error",
+      `could not load reconnect settings; using defaults: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
   return Math.min(
-    RECONNECT_BASE_MS * 2 ** Math.max(0, attempt - 1),
-    RECONNECT_MAX_MS,
+    settings.reconnectBaseSeconds * 1_000 * 2 ** Math.max(0, attempt - 1),
+    settings.reconnectMaxSeconds * 1_000,
   );
 }
 
@@ -235,10 +250,13 @@ async function runConnection(
 
   // Reconnect unless the caller asked us to stop. The device closes the
   // stream on its own schedule, so a silent supervisor is required.
-  if (!registry.has(device.id) || entry.state.status === "idle") {
+  if (!registry.has(device.id) || isIdle(entry)) {
     return;
   }
-  const delay = backoffDelay(entry.state.attempt);
+  const delay = await backoffDelay(entry.state.attempt, device);
+  if (!registry.has(device.id) || isIdle(entry)) {
+    return;
+  }
   publish(device.id, {
     status: "reconnecting",
     message: `Reconnecting in ${Math.round(delay / 1000)}s`,

@@ -1,9 +1,6 @@
 import { Buffer } from "node:buffer";
-import {
-  compressUserPhoto,
-  MAX_DEVICE_PHOTO_BYTES,
-  MAX_UPLOAD_BYTES,
-} from "@/lib/hik/user-photo";
+import { getAppSettings } from "@/lib/hik/settings-store";
+import { compressUserPhoto } from "@/lib/hik/user-photo";
 import {
   getManagedUser,
   getManagedUserPhoto,
@@ -14,10 +11,15 @@ import { syncUserPhotoToDevices } from "@/lib/hik/user-sync";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-async function readUpload(request: Request): Promise<Uint8Array<ArrayBuffer>> {
+async function readUpload(
+  request: Request,
+  maxUploadBytes: number,
+): Promise<Uint8Array<ArrayBuffer>> {
   const contentLength = Number(request.headers.get("content-length") ?? 0);
-  if (Number.isFinite(contentLength) && contentLength > MAX_UPLOAD_BYTES) {
-    throw new RangeError("The source image must be 10 MB or smaller.");
+  if (Number.isFinite(contentLength) && contentLength > maxUploadBytes) {
+    throw new RangeError(
+      `The source image must be ${Math.floor(maxUploadBytes / (1024 * 1024))} MB or smaller.`,
+    );
   }
   if (!request.body) {
     return new Uint8Array();
@@ -33,9 +35,11 @@ async function readUpload(request: Request): Promise<Uint8Array<ArrayBuffer>> {
         break;
       }
       total += value.byteLength;
-      if (total > MAX_UPLOAD_BYTES) {
+      if (total > maxUploadBytes) {
         await reader.cancel();
-        throw new RangeError("The source image must be 10 MB or smaller.");
+        throw new RangeError(
+          `The source image must be ${Math.floor(maxUploadBytes / (1024 * 1024))} MB or smaller.`,
+        );
       }
       chunks.push(value);
     }
@@ -74,9 +78,13 @@ export async function POST(
     return Response.json({ error: "User not found." }, { status: 404 });
   }
 
+  const settings = await getAppSettings();
+  const maxUploadBytes = settings.maxPhotoUploadMB * 1024 * 1024;
+  const maxDevicePhotoBytes = settings.facePhotoTargetKB * 1024;
+
   let input: Uint8Array<ArrayBuffer>;
   try {
-    input = await readUpload(request);
+    input = await readUpload(request, maxUploadBytes);
   } catch (error) {
     if (error instanceof RangeError) {
       return Response.json({ error: error.message }, { status: 413 });
@@ -95,7 +103,10 @@ export async function POST(
 
   let compressed: Uint8Array<ArrayBuffer>;
   try {
-    compressed = await compressUserPhoto(Buffer.from(input));
+    compressed = await compressUserPhoto(
+      Buffer.from(input),
+      maxDevicePhotoBytes,
+    );
   } catch (error) {
     return Response.json(
       {
@@ -113,7 +124,7 @@ export async function POST(
   return Response.json({
     photoUrl: user.photoUrl ?? `/api/users/${id}/photo`,
     sizeBytes: compressed.byteLength,
-    maxSizeBytes: MAX_DEVICE_PHOTO_BYTES,
+    maxSizeBytes: maxDevicePhotoBytes,
     results,
   });
 }

@@ -44,7 +44,10 @@ npm run start
 ```
 
 Open the multi-page dashboard to manage devices, people, access events, and
-sync history separately. Add a device with its host/port/username/password and
+sync history separately. Use **Settings** to configure live-stream startup,
+history sync cadence/lookback/overlap/batch size, reconnect backoff, attendance
+refresh, and face-photo upload/compression limits. Settings are saved in SQLite
+and applied by the running server. Add a device with its host/port/username/password and
 attendance direction (`In`, `Out`, or `None`);
 the credentials are validated immediately by fetching
 `/ISAPI/System/deviceInfo`.
@@ -63,6 +66,7 @@ database elsewhere, set `DATABASE_URL` (e.g.
 | Table | Holds |
 | --- | --- |
 | `Device` | One row per terminal: address, credentials, label |
+| `AppSettings` (`app_settings`) | Persistent collection, sync, refresh, and photo-processing settings |
 | `User` | Master directory: identity, location, person type, validity, up to five cards, authentication settings and optimized face photo |
 | `UserSyncLog` | Per-device success/failure history for every user sync attempt |
 | `LogEvent` | Every access event seen from a device |

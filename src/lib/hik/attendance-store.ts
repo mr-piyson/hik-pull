@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { getDeviceInfo } from "./client";
 import { prisma } from "./db";
-import { queryEvents } from "./event-store";
 import { getDevice, getDeviceMetadata, saveDeviceMetadata } from "./store";
 import {
   type AccessEvent,
@@ -11,7 +10,6 @@ import {
 } from "./types";
 
 const INSERT_CHUNK = 200;
-const AUTH_EVENT_WINDOW_MS = 10_000;
 
 export type AttendanceLogEntry = {
   id: string;
@@ -62,99 +60,12 @@ function nullableText(value: string): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
-function hasCompletePersonIdentity(event: AccessEvent): boolean {
-  return Boolean(nullableText(event.employeeNo) && nullableText(event.name));
-}
-
-type PersonIdentity = {
-  personId: string | null;
-  personName: string | null;
-  cardNo: string | null;
-};
-
-function identityFromEvent(event: {
-  employeeNo: string;
-  name: string;
-  cardNo: string;
-}): PersonIdentity | null {
-  const identity = {
-    personId: nullableText(event.employeeNo),
-    personName: nullableText(event.name),
-    cardNo: nullableText(event.cardNo),
-  };
-  return identity.personId && identity.personName ? identity : null;
-}
-
-function eventTimeMs(event: { time: string | null }): number | null {
-  if (!event.time) {
-    return null;
-  }
-  const time = Date.parse(event.time);
-  return Number.isNaN(time) ? null : time;
-}
-
-async function findNearbyDoorIdentity(
-  deviceId: string,
-  event: { time: string | null },
-): Promise<PersonIdentity | null> {
-  const time = eventTimeMs(event);
-  if (time === null) {
-    return null;
-  }
-  const candidates = (
-    await queryEvents({
-      deviceId,
-      from: new Date(time - AUTH_EVENT_WINDOW_MS),
-      to: new Date(time + AUTH_EVENT_WINDOW_MS),
-    })
-  ).filter(
-    (candidate) =>
-      candidate.minor === 75 && hasCompletePersonIdentity(candidate),
+function hasUserData(event: AccessEvent): boolean {
+  return Boolean(
+    nullableText(event.employeeNo) ||
+      nullableText(event.name) ||
+      nullableText(event.cardNo),
   );
-  const nearest = candidates
-    .map((candidate) => ({
-      candidate,
-      distance: Math.abs((eventTimeMs(candidate) ?? 0) - time),
-    }))
-    .sort((left, right) => left.distance - right.distance);
-  const closest = nearest[0];
-  if (!closest || closest.distance > AUTH_EVENT_WINDOW_MS) {
-    return null;
-  }
-  if (
-    nearest[1]?.distance === closest.distance &&
-    (nearest[1].candidate.employeeNo !== closest.candidate.employeeNo ||
-      nearest[1].candidate.name !== closest.candidate.name)
-  ) {
-    return null;
-  }
-  return identityFromEvent(closest.candidate);
-}
-
-async function resolveGrantIdentity(
-  event: AccessEvent,
-): Promise<PersonIdentity | null> {
-  const ownIdentity = identityFromEvent(event);
-  if (ownIdentity) {
-    return ownIdentity;
-  }
-  return findNearbyDoorIdentity(event.deviceId, event);
-}
-
-async function nearbyGrantedEvents(
-  deviceId: string,
-  event: AccessEvent,
-): Promise<AccessEvent[]> {
-  const time = eventTimeMs(event);
-  if (time === null) {
-    return [];
-  }
-  return queryEvents({
-    deviceId,
-    from: new Date(time - AUTH_EVENT_WINDOW_MS),
-    to: new Date(time + AUTH_EVENT_WINDOW_MS),
-    direction: "in",
-  });
 }
 
 function parseSerialNo(value: string | null): bigint | null {
@@ -197,26 +108,16 @@ async function resolveDeviceMetadata(device: DeviceRecord) {
 }
 
 /**
- * Some terminals emit a generic grant without person fields and put the
- * identity on the corresponding "door opened" event. Pair same-device events
- * within a short time window and keep the grant's serial/time as attendance.
+ * Store any event carrying person data, regardless of event direction or code.
+ * Some terminals only attach person data to the fingerprint event itself, so
+ * do not infer eligibility from event classification or correlate neighbors.
  */
 export async function recordAttendanceEvents(
   device: DeviceRecord,
   events: AccessEvent[],
 ): Promise<number> {
-  const grants = new Map<string, AccessEvent>();
-  for (const event of events) {
-    if (event.direction === "in") {
-      grants.set(event.id, event);
-    }
-    if (event.minor === 75 && hasCompletePersonIdentity(event)) {
-      for (const nearby of await nearbyGrantedEvents(device.id, event)) {
-        grants.set(nearby.id, nearby);
-      }
-    }
-  }
-  if (grants.size === 0) {
+  const eventsWithUserData = events.filter(hasUserData);
+  if (eventsWithUserData.length === 0) {
     return 0;
   }
 
@@ -227,34 +128,20 @@ export async function recordAttendanceEvents(
     );
   }
   const metadata = await resolveDeviceMetadata(device);
-  const rows = [];
-  for (const event of grants.values()) {
-    let identity: PersonIdentity | null = null;
-    try {
-      identity = await resolveGrantIdentity(event);
-    } catch (error) {
-      console.error(
-        `[attendance] Could not resolve identity for ${event.deviceId}/${event.id}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    if (!identity?.personId || !identity.personName) {
-      continue;
-    }
-    rows.push({
-      id: randomUUID(),
-      sourceKey: `${event.deviceId}:${event.id}`,
-      deviceIp: `${device.host}:${device.port}`,
-      deviceModel: metadata.model,
-      deviceSerial: metadata.serial,
-      serialNo: parseSerialNo(event.serialNo),
-      personId: identity.personId,
-      personName: identity.personName,
-      cardNo: identity.cardNo,
-      gateDirection: currentDevice.gateDirection,
-      dateTime: parseDateTime(event.time),
-      timeRaw: event.time,
-    });
-  }
+  const rows = eventsWithUserData.map((event) => ({
+    id: randomUUID(),
+    sourceKey: `${event.deviceId}:${event.id}`,
+    deviceIp: `${device.host}:${device.port}`,
+    deviceModel: metadata.model,
+    deviceSerial: metadata.serial,
+    serialNo: parseSerialNo(event.serialNo),
+    personId: nullableText(event.employeeNo),
+    personName: nullableText(event.name),
+    cardNo: nullableText(event.cardNo),
+    gateDirection: currentDevice.gateDirection,
+    dateTime: parseDateTime(event.time),
+    timeRaw: event.time,
+  }));
   let inserted = 0;
   for (let index = 0; index < rows.length; index += INSERT_CHUNK) {
     const chunk = rows.slice(index, index + INSERT_CHUNK);
@@ -271,16 +158,16 @@ export async function recordAttendanceEvents(
           continue;
         }
         if (
-          row.personId &&
-          row.personName &&
-          (!existing.personId || !existing.personName)
+          (row.personId && !existing.personId) ||
+          (row.personName && !existing.personName) ||
+          (row.cardNo && !existing.cardNo)
         ) {
           await tx.attendanceLog.update({
             where: { sourceKey: row.sourceKey },
             data: {
-              personId: row.personId,
-              personName: row.personName,
-              cardNo: row.cardNo,
+              ...(row.personId ? { personId: row.personId } : {}),
+              ...(row.personName ? { personName: row.personName } : {}),
+              ...(row.cardNo ? { cardNo: row.cardNo } : {}),
             },
           });
         }
@@ -299,30 +186,27 @@ export async function listAttendanceLogs(
   total: number;
   hasMore: boolean;
 }> {
+  const where = {
+    OR: [
+      {
+        AND: [{ personId: { not: null } }, { personId: { not: "" } }],
+      },
+      {
+        AND: [{ personName: { not: null } }, { personName: { not: "" } }],
+      },
+      {
+        AND: [{ cardNo: { not: null } }, { cardNo: { not: "" } }],
+      },
+    ],
+  };
   const [rows, total] = await Promise.all([
     prisma.attendanceLog.findMany({
-      where: {
-        AND: [
-          { personId: { not: null } },
-          { personName: { not: null } },
-          { personId: { not: "" } },
-          { personName: { not: "" } },
-        ],
-      },
+      where,
       orderBy: [{ dateTime: { sort: "desc", nulls: "last" } }, { id: "desc" }],
       skip: offset,
       take: limit + 1,
     }),
-    prisma.attendanceLog.count({
-      where: {
-        AND: [
-          { personId: { not: null } },
-          { personName: { not: null } },
-          { personId: { not: "" } },
-          { personName: { not: "" } },
-        ],
-      },
-    }),
+    prisma.attendanceLog.count({ where }),
   ]);
   const hasMore = rows.length > limit;
   return {

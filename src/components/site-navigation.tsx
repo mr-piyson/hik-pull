@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/access-events", label: "Access events", marker: "EV" },
   { href: "/attendance", label: "Attendance", marker: "AT" },
   { href: "/sync-history", label: "Sync history", marker: "SY" },
+  { href: "/settings", label: "Settings", marker: "ST" },
 ] as const;
 
 export function SiteNavigation() {

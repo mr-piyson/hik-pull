@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { prisma } from "@/lib/hik/db";
 import { probeDevice, startDevice, stopDevice } from "@/lib/hik/registry";
+import { getAppSettings } from "@/lib/hik/settings-store";
 import {
   assertHost,
   assertPassword,
@@ -88,13 +89,16 @@ export const devicesRouter = router({
       });
     }
 
+    const autoStartLiveStreams = (await getAppSettings()).autoStartLiveStreams;
     try {
       const info = await probeDevice(device);
       const saved = await saveDevice(device, {
         model: info.model,
         serial: info.serialNumber,
       });
-      startDevice(saved);
+      if (autoStartLiveStreams) {
+        startDevice(saved);
+      }
       return { device: toPublicDevice(saved), info };
     } catch (error) {
       throw new TRPCError({
@@ -107,6 +111,8 @@ export const devicesRouter = router({
   import: publicProcedure
     .input(z.array(importDeviceInput))
     .mutation(async ({ input }) => {
+      const autoStartLiveStreams = (await getAppSettings())
+        .autoStartLiveStreams;
       const saved: DeviceRecord[] = [];
       for (const raw of input) {
         let device: DeviceRecord;
@@ -128,7 +134,9 @@ export const devicesRouter = router({
           return badRequest(error);
         }
         const savedDevice = await saveDevice(device);
-        startDevice(savedDevice);
+        if (autoStartLiveStreams) {
+          startDevice(savedDevice);
+        }
         saved.push(savedDevice);
       }
       return { devices: saved.map(toPublicDevice) };
@@ -152,6 +160,8 @@ export const devicesRouter = router({
         });
       }
 
+      const autoStartLiveStreams = (await getAppSettings())
+        .autoStartLiveStreams;
       const next = {
         ...device,
         label: input.label === undefined ? device.label : input.label.trim(),
@@ -180,7 +190,9 @@ export const devicesRouter = router({
       if (changedCredentials) {
         stopDevice(saved.id);
       }
-      startDevice(saved);
+      if (autoStartLiveStreams) {
+        startDevice(saved);
+      }
       return { device: toPublicDevice(saved) };
     }),
 
