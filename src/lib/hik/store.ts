@@ -105,6 +105,76 @@ export async function saveDevice(
   return device;
 }
 
+export type DeviceSyncState = {
+  id: string;
+  label: string;
+  status: string;
+  lastHistorySyncAt: Date | null;
+  lastEventTime: Date | null;
+  lastEventKey: string | null;
+  lastSyncError: string | null;
+};
+
+/** Operational view of every device's synchronization progress. */
+export async function listDeviceSyncStates(): Promise<DeviceSyncState[]> {
+  return prisma.device.findMany({
+    select: {
+      id: true,
+      label: true,
+      status: true,
+      lastHistorySyncAt: true,
+      lastEventTime: true,
+      lastEventKey: true,
+      lastSyncError: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
+/** Record the live-connection state for a terminal, for the status display. */
+export async function setDeviceStatus(
+  id: string,
+  status: string,
+): Promise<void> {
+  await prisma.device.updateMany({ where: { id }, data: { status } });
+}
+
+/**
+ * Persist the outcome of one history reconciliation. The cursor is only
+ * advanced by callers after the sweep fully succeeds; on failure only the
+ * error is recorded so the window is retried on the next run.
+ */
+export async function recordDeviceSyncResult(
+  id: string,
+  result: {
+    lastEventTime?: Date | null;
+    lastEventKey?: string | null;
+    lastHistorySyncAt?: Date;
+    error?: string | null;
+  },
+): Promise<void> {
+  await prisma.device.update({
+    where: { id },
+    data: {
+      ...(result.error === undefined
+        ? {}
+        : {
+            lastSyncError: result.error,
+            status: result.error ? "error" : "online",
+          }),
+      ...(result.lastEventTime !== undefined
+        ? { lastEventTime: result.lastEventTime }
+        : {}),
+      ...(result.lastEventKey !== undefined
+        ? { lastEventKey: result.lastEventKey }
+        : {}),
+      ...(result.lastHistorySyncAt
+        ? { lastHistorySyncAt: result.lastHistorySyncAt }
+        : {}),
+    },
+  });
+}
+
 export async function deleteDevice(id: string): Promise<boolean> {
   // `LogEvent.deviceId` cascades on delete, so a removed device takes its
   // stored events with it rather than leaving rows nothing can ever match.

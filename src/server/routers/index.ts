@@ -4,6 +4,7 @@ import { devicesRouter } from "./devices";
 import { eventsRouter } from "./events";
 import { settingsRouter } from "./settings";
 import { usersRouter } from "./users";
+import { workerRouter } from "./worker";
 
 export const appRouter = router({
   attendance: attendanceRouter,
@@ -11,6 +12,7 @@ export const appRouter = router({
   events: eventsRouter,
   settings: settingsRouter,
   users: usersRouter,
+  worker: workerRouter,
 });
 
 export type AppRouter = typeof appRouter;

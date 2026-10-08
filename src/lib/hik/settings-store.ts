@@ -13,6 +13,21 @@ export type AppSettings = {
   attendanceRefreshSeconds: number;
   facePhotoTargetKB: number;
   maxPhotoUploadMB: number;
+  hikvisionSyncEnabled: boolean;
+  hikvisionIntervalSecs: number;
+  cloudSyncEnabled: boolean;
+  cloudIntervalSecs: number;
+  cloudBatchSize: number;
+  cloudRetryBaseSecs: number;
+  cloudMaxAttempts: number;
+  cloudEndpoint: string;
+  /** Server-side only. Never returned to the browser. */
+  cloudApiToken: string;
+};
+
+/** Operator-facing shape: the API token is replaced by a presence flag. */
+export type PublicAppSettings = Omit<AppSettings, "cloudApiToken"> & {
+  hasCloudApiToken: boolean;
 };
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -28,7 +43,21 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   attendanceRefreshSeconds: 10,
   facePhotoTargetKB: 190,
   maxPhotoUploadMB: 10,
+  hikvisionSyncEnabled: true,
+  hikvisionIntervalSecs: 30,
+  cloudSyncEnabled: false,
+  cloudIntervalSecs: 60,
+  cloudBatchSize: 100,
+  cloudRetryBaseSecs: 30,
+  cloudMaxAttempts: 10,
+  cloudEndpoint: "",
+  cloudApiToken: "",
 };
+
+export function toPublicSettings(settings: AppSettings): PublicAppSettings {
+  const { cloudApiToken, ...rest } = settings;
+  return { ...rest, hasCloudApiToken: cloudApiToken.length > 0 };
+}
 
 export async function getAppSettings(): Promise<AppSettings> {
   const row = await prisma.appSettings.upsert({
@@ -49,16 +78,76 @@ export async function getAppSettings(): Promise<AppSettings> {
     attendanceRefreshSeconds: row.attendanceRefreshSeconds,
     facePhotoTargetKB: row.facePhotoTargetKB,
     maxPhotoUploadMB: row.maxPhotoUploadMB,
+    hikvisionSyncEnabled: row.hikvisionSyncEnabled,
+    hikvisionIntervalSecs: row.hikvisionIntervalSecs,
+    cloudSyncEnabled: row.cloudSyncEnabled,
+    cloudIntervalSecs: row.cloudIntervalSecs,
+    cloudBatchSize: row.cloudBatchSize,
+    cloudRetryBaseSecs: row.cloudRetryBaseSecs,
+    cloudMaxAttempts: row.cloudMaxAttempts,
+    cloudEndpoint: row.cloudEndpoint,
+    cloudApiToken: row.cloudApiToken || process.env.CLOUD_API_TOKEN || "",
   };
 }
 
+export type SaveAppSettingsInput = Omit<AppSettings, "cloudApiToken"> & {
+  /**
+   * Omitted or empty keeps the stored token, so the browser never has to round
+   * trip the secret. A non-empty value replaces it.
+   */
+  cloudApiToken?: string;
+};
+
 export async function saveAppSettings(
-  settings: AppSettings,
+  settings: SaveAppSettingsInput,
 ): Promise<AppSettings> {
+  const { cloudApiToken, ...rest } = settings;
+  const data = {
+    ...rest,
+    ...(cloudApiToken ? { cloudApiToken } : {}),
+  };
   await prisma.appSettings.upsert({
     where: { id: "global" },
-    create: { id: "global", ...settings },
-    update: settings,
+    create: { id: "global", ...data },
+    update: data,
   });
-  return settings;
+  return getAppSettings();
+}
+
+export type WorkerStatus = {
+  lastHikvisionRunAt: string | null;
+  lastCloudRunAt: string | null;
+  lastCloudError: string | null;
+};
+
+export async function getWorkerStatus(): Promise<WorkerStatus> {
+  const row = await prisma.workerState.upsert({
+    where: { id: "global" },
+    create: { id: "global" },
+    update: {},
+  });
+  return {
+    lastHikvisionRunAt: row.lastHikvisionRunAt?.toISOString() ?? null,
+    lastCloudRunAt: row.lastCloudRunAt?.toISOString() ?? null,
+    lastCloudError: row.lastCloudError,
+  };
+}
+
+export async function recordWorkerRun(
+  job: "hikvision" | "cloud",
+  options: { error?: string | null } = {},
+): Promise<void> {
+  const now = new Date();
+  const data =
+    job === "hikvision"
+      ? { lastHikvisionRunAt: now }
+      : {
+          lastCloudRunAt: now,
+          lastCloudError: options.error ?? null,
+        };
+  await prisma.workerState.upsert({
+    where: { id: "global" },
+    create: { id: "global", ...data },
+    update: data,
+  });
 }

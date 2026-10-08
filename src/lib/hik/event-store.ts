@@ -296,9 +296,13 @@ export async function recordEvents(
   try {
     await recordAttendanceEvents(device, events);
   } catch (error) {
+    // Rethrow so callers keep the history checkpoint behind these events and
+    // replay the window. LogEvent rows are deduped on retry, so the sweep is
+    // safely idempotent; swallowing here would lose the attendance rows.
     console.error(
       `[attendance] Could not save events with person data for ${device.host}:${device.port}: ${error instanceof Error ? error.message : String(error)}`,
     );
+    throw error;
   }
   return inserted;
 }

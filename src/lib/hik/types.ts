@@ -82,6 +82,8 @@ export type AccessEvent = {
   cardNo: string;
   readerNo: number | null;
   serialNo: string | null;
+  /** Verification method(s) reported by the device, e.g. "face", "card". */
+  verifyMode: string | null;
   source: "live" | "backfill";
 };
 

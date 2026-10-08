@@ -9,6 +9,7 @@ import {
   xmlToJson,
 } from "./multipart";
 import { DEFAULT_APP_SETTINGS, getAppSettings } from "./settings-store";
+import { setDeviceStatus } from "./store";
 import type { AccessEvent, ConnectionState, DeviceRecord } from "./types";
 
 type EventListener = (event: AccessEvent) => void;
@@ -68,6 +69,15 @@ function entryFor(deviceId: string): Connection {
 
 function isIdle(entry: Connection): boolean {
   return entry.state.status === "idle";
+}
+
+/**
+ * Persist the operational status for the dashboard. Fire-and-forget: a status
+ * write must never stall the stream loop, and the SSE feed is the source of
+ * truth while the app is running.
+ */
+function markDeviceStatus(deviceId: string, status: string): void {
+  void setDeviceStatus(deviceId, status).catch(() => undefined);
 }
 
 function publish(deviceId: string, patch: Partial<ConnectionState>): void {
@@ -210,6 +220,7 @@ async function runConnection(
       "ok",
       `stream open, boundary=${boundary}, listening for events`,
     );
+    markDeviceStatus(device.id, "online");
 
     for await (const part of parseMultipart(stream, boundary)) {
       if (controller.signal.aborted) {
@@ -239,6 +250,7 @@ async function runConnection(
     const message = error instanceof Error ? error.message : String(error);
     publish(device.id, { status: "error", message });
     logStream(device, "error", message);
+    markDeviceStatus(device.id, "error");
   } finally {
     clearTimeout(slowStart);
     if (entry.controller === controller) {
@@ -295,6 +307,7 @@ export function stopDevice(deviceId: string): void {
     entry.reconnectTimer = null;
   }
   publish(deviceId, { status: "idle", message: null, attempt: 0 });
+  markDeviceStatus(deviceId, "offline");
   if (entry.device) {
     logStream(entry.device, "info", "live stream stopped");
   }

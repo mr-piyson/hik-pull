@@ -3,39 +3,15 @@ export async function register(): Promise<void> {
     return;
   }
 
-  const [
-    { listDevices },
-    { startDevice },
-    { configureDailyHistorySync },
-    { getAppSettings },
-  ] = await Promise.all([
-    import("./src/lib/hik/store"),
-    import("./src/lib/hik/registry"),
-    import("./src/lib/hik/daily-history-sync"),
-    import("./src/lib/hik/settings-store"),
-  ]);
+  const { startAttendanceWorker } = await import("./src/workers/attendance");
 
   try {
-    await configureDailyHistorySync();
-    const [devices, settings] = await Promise.all([
-      listDevices(),
-      getAppSettings(),
-    ]);
-    if (settings.autoStartLiveStreams) {
-      for (const device of devices) {
-        startDevice(device);
-      }
-      console.info(
-        `[attendance] Live collection auto-started for ${devices.length} configured device(s).`,
-      );
-    } else {
-      console.info(
-        "[attendance] Automatic live collection is disabled in settings.",
-      );
-    }
+    // The worker is always running; Settings enable/disable its jobs through
+    // the database, so nothing here needs restarting when an operator saves.
+    startAttendanceWorker();
   } catch (error) {
     console.error(
-      `[startup] Could not apply persisted collection settings: ${error instanceof Error ? error.message : String(error)}`,
+      `[startup] Could not start the attendance worker: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

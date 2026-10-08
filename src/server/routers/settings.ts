@@ -1,7 +1,9 @@
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { configureDailyHistorySync } from "@/lib/hik/daily-history-sync";
-import { getAppSettings, saveAppSettings } from "@/lib/hik/settings-store";
+import {
+  getAppSettings,
+  saveAppSettings,
+  toPublicSettings,
+} from "@/lib/hik/settings-store";
 import { publicProcedure, router } from "../trpc";
 
 const settingsInput = z
@@ -18,6 +20,16 @@ const settingsInput = z
     attendanceRefreshSeconds: z.number().int().min(5).max(300),
     facePhotoTargetKB: z.number().int().min(50).max(190),
     maxPhotoUploadMB: z.number().int().min(1).max(50),
+    hikvisionSyncEnabled: z.boolean(),
+    hikvisionIntervalSecs: z.number().int().min(5).max(86_400),
+    cloudSyncEnabled: z.boolean(),
+    cloudIntervalSecs: z.number().int().min(5).max(86_400),
+    cloudBatchSize: z.number().int().min(1).max(1000),
+    cloudRetryBaseSecs: z.number().int().min(1).max(3600),
+    cloudMaxAttempts: z.number().int().min(1).max(100),
+    cloudEndpoint: z.string().trim().max(500),
+    // Omitted or empty keeps the stored token; a value replaces it.
+    cloudApiToken: z.string().max(500).optional(),
   })
   .refine(
     (settings) => settings.reconnectBaseSeconds <= settings.reconnectMaxSeconds,
@@ -28,17 +40,11 @@ const settingsInput = z
   );
 
 export const settingsRouter = router({
-  get: publicProcedure.query(() => getAppSettings()),
+  get: publicProcedure.query(async () =>
+    toPublicSettings(await getAppSettings()),
+  ),
   save: publicProcedure.input(settingsInput).mutation(async ({ input }) => {
     const settings = await saveAppSettings(input);
-    try {
-      await configureDailyHistorySync();
-    } catch (error) {
-      throw new TRPCError({
-        code: "INTERNAL_SERVER_ERROR",
-        message: `Settings were saved, but the history schedule could not be updated: ${error instanceof Error ? error.message : String(error)}`,
-      });
-    }
-    return settings;
+    return toPublicSettings(settings);
   }),
 });

@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { AttendanceLogEntry } from "@/lib/hik/attendance-store";
+import type {
+  AttendanceLogEntry,
+  CloudSyncStatus,
+} from "@/lib/hik/attendance-store";
 import { trpc } from "@/trpc/client";
 
 type AttendancePage = {
@@ -9,6 +12,8 @@ type AttendancePage = {
   total: number;
   hasMore: boolean;
 };
+
+type SyncFilter = "ALL" | CloudSyncStatus;
 
 function display(value: string | null): string {
   return value ?? "—";
@@ -32,6 +37,27 @@ function displayDateTime(value: string | null): string {
       });
 }
 
+const SYNC_TONE: Record<string, string> = {
+  SYNCED:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
+  PENDING:
+    "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
+  FAILED:
+    "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300",
+};
+
+function SyncBadge({ status }: { status: string }) {
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+        SYNC_TONE[status] ?? SYNC_TONE.PENDING
+      }`}
+    >
+      {status}
+    </span>
+  );
+}
+
 export function AttendanceViewer({
   initialPage,
   refreshSeconds,
@@ -45,10 +71,20 @@ export function AttendanceViewer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [filter, setFilter] = useState<SyncFilter>("ALL");
+
+  const queryInput = useCallback(
+    (offset: number, limit: number) => ({
+      offset,
+      limit,
+      ...(filter === "ALL" ? {} : { syncStatus: filter }),
+    }),
+    [filter],
+  );
 
   const refresh = useCallback(async () => {
     try {
-      const page = await trpc.attendance.list.query({ offset: 0, limit: 100 });
+      const page = await trpc.attendance.list.query(queryInput(0, 100));
       setLogs((current) => {
         const byId = new Map(current.map((log) => [log.id, log]));
         for (const log of page.logs) {
@@ -75,7 +111,30 @@ export function AttendanceViewer({
           : "Could not refresh attendance logs.",
       );
     }
-  }, []);
+  }, [queryInput]);
+
+  // Replace the list (rather than merge) whenever the filter changes, so rows
+  // that no longer match are not left behind.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const page = await trpc.attendance.list.query(queryInput(0, 100));
+        if (cancelled) {
+          return;
+        }
+        setLogs(page.logs);
+        setHasMore(page.hasMore);
+        setTotal(page.total);
+        setLastUpdated(new Date());
+      } catch {
+        // The interval refresh reports errors; this reset stays quiet.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [queryInput]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -88,10 +147,9 @@ export function AttendanceViewer({
     setLoading(true);
     setError(null);
     try {
-      const page = await trpc.attendance.list.query({
-        offset: logs.length,
-        limit: 100,
-      });
+      const page = await trpc.attendance.list.query(
+        queryInput(logs.length, 100),
+      );
       setLogs((current) => [...current, ...page.logs]);
       setHasMore(page.hasMore);
       setTotal(page.total);
@@ -116,8 +174,9 @@ export function AttendanceViewer({
           Person events
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
-          Events containing person ID, name, or card data from configured
-          terminals. Device time is retained verbatim in the raw time column.
+          Non-denied events containing person ID, name, or card data from
+          configured terminals. Device time is retained verbatim in the raw time
+          column.
         </p>
         <p className="mt-1 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
           Attendance is collected when a terminal&apos;s live stream is running
@@ -135,6 +194,19 @@ export function AttendanceViewer({
       <section className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
         <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
           <h2 className="font-semibold">Attendance records</h2>
+          <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            Cloud status
+            <select
+              value={filter}
+              onChange={(event) => setFilter(event.target.value as SyncFilter)}
+              className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
+            >
+              <option value="ALL">All</option>
+              <option value="PENDING">Pending</option>
+              <option value="SYNCED">Synced</option>
+              <option value="FAILED">Failed</option>
+            </select>
+          </label>
           <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
             Showing {logs.length} of {total}
           </span>
@@ -173,6 +245,12 @@ export function AttendanceViewer({
                   Attendance direction
                 </th>
                 <th scope="col" className="px-4 py-3">
+                  Verification
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Cloud
+                </th>
+                <th scope="col" className="px-4 py-3">
                   Date/time
                 </th>
                 <th scope="col" className="px-4 py-3">
@@ -204,6 +282,10 @@ export function AttendanceViewer({
                     {display(log.cardNo)}
                   </td>
                   <td className="px-4 py-3 capitalize">{log.gateDirection}</td>
+                  <td className="px-4 py-3">{display(log.verification)}</td>
+                  <td className="px-4 py-3">
+                    <SyncBadge status={log.syncStatus} />
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3 text-xs">
                     {displayDateTime(log.dateTime)}
                   </td>
@@ -215,7 +297,7 @@ export function AttendanceViewer({
               {logs.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={12}
                     className="px-4 py-12 text-center text-sm text-zinc-500 dark:text-zinc-400"
                   >
                     No successful authentication records have been collected

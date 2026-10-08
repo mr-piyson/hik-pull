@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import type { AppSettings } from "@/lib/hik/settings-store";
+import { useCallback, useEffect, useState } from "react";
+import type { PublicAppSettings } from "@/lib/hik/settings-store";
 import { trpc } from "@/trpc/client";
 
 type NumericSettingKey = {
-  [Key in keyof AppSettings]: AppSettings[Key] extends number ? Key : never;
-}[keyof AppSettings];
+  [Key in keyof PublicAppSettings]: PublicAppSettings[Key] extends number
+    ? Key
+    : never;
+}[keyof PublicAppSettings];
+
+type WorkerStatus = Awaited<ReturnType<typeof trpc.worker.status.query>>;
 
 type NumericFieldProps = {
   label: string;
@@ -52,6 +56,38 @@ function NumericField({
   );
 }
 
+function TextField({
+  label,
+  description,
+  value,
+  placeholder,
+  type = "text",
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: string;
+  placeholder?: string;
+  type?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-2">
+      <span className="text-sm font-medium">{label}</span>
+      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+        {description}
+      </span>
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+        className="max-w-md rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+      />
+    </label>
+  );
+}
+
 function ToggleSetting({
   title,
   description,
@@ -81,20 +117,247 @@ function ToggleSetting({
   );
 }
 
+function relative(iso: string | null): string {
+  if (!iso) {
+    return "never";
+  }
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) {
+    return iso;
+  }
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1_000));
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  return `${Math.round(minutes / 60)}h ago`;
+}
+
+function StatusBadge({ tone, children }: { tone: string; children: string }) {
+  const tones: Record<string, string> = {
+    online:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
+    green:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
+    amber:
+      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
+    red: "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300",
+    gray: "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400",
+  };
+  return (
+    <span
+      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${tones[tone] ?? tones.gray}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function deviceTone(status: string): string {
+  if (status === "online") {
+    return "online";
+  }
+  if (status === "error") {
+    return "red";
+  }
+  if (status === "offline") {
+    return "gray";
+  }
+  return "amber";
+}
+
+function WorkerStatusPanel({
+  status,
+  onRetry,
+  retrying,
+}: {
+  status: WorkerStatus | null;
+  onRetry: () => void;
+  retrying: boolean;
+}) {
+  if (!status) {
+    return (
+      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        Loading worker status…
+      </p>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            Hikvision sync
+          </p>
+          <p className="mt-1 flex items-center gap-2 text-sm font-medium">
+            <StatusBadge tone={status.enabled.hikvision ? "green" : "gray"}>
+              {status.enabled.hikvision ? "Enabled" : "Paused"}
+            </StatusBadge>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              {relative(status.lastHikvisionRunAt)}
+            </span>
+          </p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            Cloud sync
+          </p>
+          <p className="mt-1 flex items-center gap-2 text-sm font-medium">
+            <StatusBadge tone={status.enabled.cloud ? "green" : "gray"}>
+              {status.enabled.cloud ? "Enabled" : "Paused"}
+            </StatusBadge>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              {status.configured
+                ? relative(status.lastCloudRunAt)
+                : "not configured"}
+            </span>
+          </p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            Pending cloud events
+          </p>
+          <p className="mt-1 text-2xl font-semibold">{status.queue.pending}</p>
+        </div>
+        <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <p className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            Synced / failed
+          </p>
+          <p className="mt-1 text-2xl font-semibold">
+            {status.queue.synced}
+            <span className="text-base font-normal text-zinc-500 dark:text-zinc-400">
+              {" "}
+              / {status.queue.failed}
+            </span>
+          </p>
+          {status.queue.failed > 0 ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={retrying}
+              className="mt-2 rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium hover:bg-zinc-100 disabled:cursor-wait disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              {retrying ? "Requeuing…" : "Retry failed"}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {status.lastCloudError ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+        >
+          Last cloud error: {status.lastCloudError}
+        </p>
+      ) : null}
+
+      <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead className="bg-zinc-100 text-xs uppercase tracking-wide text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+            <tr>
+              <th className="px-4 py-2">Device</th>
+              <th className="px-4 py-2">Status</th>
+              <th className="px-4 py-2">Last history sync</th>
+              <th className="px-4 py-2">Last event key</th>
+              <th className="px-4 py-2">Last error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {status.devices.map((device) => (
+              <tr
+                key={device.id}
+                className="border-t border-zinc-200 align-top dark:border-zinc-800"
+              >
+                <td className="px-4 py-2 font-medium">{device.label}</td>
+                <td className="px-4 py-2">
+                  <StatusBadge tone={deviceTone(device.status)}>
+                    {device.status}
+                  </StatusBadge>
+                </td>
+                <td className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  {relative(device.lastHistorySyncAt)}
+                </td>
+                <td className="px-4 py-2 font-mono text-xs">
+                  {device.lastEventKey ?? "—"}
+                </td>
+                <td className="px-4 py-2 text-xs text-red-700 dark:text-red-300">
+                  {device.lastSyncError ?? "—"}
+                </td>
+              </tr>
+            ))}
+            {status.devices.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={5}
+                  className="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400"
+                >
+                  No devices configured.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPanel({
   initialSettings,
 }: {
-  initialSettings: AppSettings;
+  initialSettings: PublicAppSettings;
 }) {
   const [settings, setSettings] = useState(initialSettings);
+  const [apiToken, setApiToken] = useState("");
   const [saving, setSaving] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<WorkerStatus | null>(null);
+
+  const loadStatus = useCallback(async () => {
+    try {
+      setStatus(await trpc.worker.status.query());
+    } catch {
+      // The status panel is informational; a failed poll is not an error.
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStatus();
+    const interval = setInterval(() => void loadStatus(), 5_000);
+    return () => clearInterval(interval);
+  }, [loadStatus]);
 
   function setNumber(key: NumericSettingKey, value: number) {
     setSettings((current) => ({ ...current, [key]: value }));
     setMessage(null);
     setError(null);
+  }
+
+  async function retryFailed() {
+    setRetrying(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const { requeued } = await trpc.worker.retryFailed.mutate();
+      setMessage(
+        requeued === 0
+          ? "No failed events to retry."
+          : `${requeued} failed event(s) requeued for cloud sync.`,
+      );
+      await loadStatus();
+    } catch (failure) {
+      setError(
+        failure instanceof Error ? failure.message : "Could not retry events.",
+      );
+    } finally {
+      setRetrying(false);
+    }
   }
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
@@ -103,9 +366,14 @@ export function SettingsPanel({
     setMessage(null);
     setError(null);
     try {
-      const saved = await trpc.settings.save.mutate(settings);
+      const saved = await trpc.settings.save.mutate({
+        ...settings,
+        ...(apiToken.length > 0 ? { cloudApiToken: apiToken } : {}),
+      });
       setSettings(saved);
-      setMessage("Settings saved and the history schedule was updated.");
+      setApiToken("");
+      setMessage("Settings saved. The worker applies them on its next cycle.");
+      void loadStatus();
     } catch (failure) {
       setError(
         failure instanceof Error ? failure.message : "Could not save settings.",
@@ -125,11 +393,27 @@ export function SettingsPanel({
           Settings &amp; sync
         </h1>
         <p className="max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
-          Configure how device events are collected, how often history is
-          reconciled, and the image limits used for terminal enrollment. Changes
-          are stored in the local database.
+          Configure how device events are collected and how they reach the
+          cloud. The attendance worker is always running; these toggles pause or
+          resume its jobs through the database, so no process is ever restarted.
         </p>
       </header>
+
+      <section className="rounded-xl border border-zinc-200 dark:border-zinc-800">
+        <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+          <h2 className="font-semibold">Worker status</h2>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Live snapshot of both synchronization jobs and the local queue.
+          </p>
+        </div>
+        <div className="p-5">
+          <WorkerStatusPanel
+            status={status}
+            onRetry={() => void retryFailed()}
+            retrying={retrying}
+          />
+        </div>
+      </section>
 
       <form
         onSubmit={(event) => void save(event)}
@@ -137,7 +421,7 @@ export function SettingsPanel({
       >
         <section className="rounded-xl border border-zinc-200 dark:border-zinc-800">
           <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-            <h2 className="font-semibold">Device collection</h2>
+            <h2 className="font-semibold">Hikvision collection</h2>
             <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
               Live streams receive events immediately; history sync recovers
               events missed while a device or server was offline.
@@ -157,13 +441,13 @@ export function SettingsPanel({
                 }
               />
               <ToggleSetting
-                title="Scheduled history sync"
+                title="Hikvision history sync"
                 description="Periodically retrieve device history and fill gaps in the live event stream."
-                checked={settings.historySyncEnabled}
-                onChange={(historySyncEnabled) =>
+                checked={settings.hikvisionSyncEnabled}
+                onChange={(hikvisionSyncEnabled) =>
                   setSettings((current) => ({
                     ...current,
-                    historySyncEnabled,
+                    hikvisionSyncEnabled,
                   }))
                 }
               />
@@ -188,26 +472,13 @@ export function SettingsPanel({
             </div>
             <div className="grid content-start gap-5 sm:grid-cols-2">
               <NumericField
-                label="History sync interval"
+                label="Hikvision sync interval"
                 description="Time between scheduled history reconciliations."
-                value={settings.historySyncIntervalHours}
-                min={1}
-                max={168}
-                unit="hours"
-                onChange={(value) =>
-                  setNumber("historySyncIntervalHours", value)
-                }
-              />
-              <NumericField
-                label="Startup delay"
-                description="Wait after server start before the first history sync."
-                value={settings.historyStartupDelaySecs}
-                min={0}
-                max={3600}
+                value={settings.hikvisionIntervalSecs}
+                min={5}
+                max={86400}
                 unit="seconds"
-                onChange={(value) =>
-                  setNumber("historyStartupDelaySecs", value)
-                }
+                onChange={(value) => setNumber("hikvisionIntervalSecs", value)}
               />
               <NumericField
                 label="Initial history lookback"
@@ -235,6 +506,95 @@ export function SettingsPanel({
                 max={1000}
                 unit="events"
                 onChange={(value) => setNumber("historyBatchSize", value)}
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-800">
+          <div className="border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+            <h2 className="font-semibold">Cloud synchronization</h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              Attendance events are queued in the local database and sent to the
+              cloud ingestion API in batches. A network outage or restart never
+              loses an event: it stays pending and is retried.
+            </p>
+          </div>
+          <div className="grid gap-6 p-5 lg:grid-cols-2">
+            <div className="flex flex-col gap-5">
+              <ToggleSetting
+                title="Cloud sync"
+                description="Send locally stored attendance events to the cloud ingestion API."
+                checked={settings.cloudSyncEnabled}
+                onChange={(cloudSyncEnabled) =>
+                  setSettings((current) => ({ ...current, cloudSyncEnabled }))
+                }
+              />
+              <TextField
+                label="Cloud endpoint"
+                description="Base URL of the AWS ingestion API, e.g. https://api.example.com."
+                value={settings.cloudEndpoint}
+                placeholder="https://api.example.com"
+                onChange={(value) =>
+                  setSettings((current) => ({
+                    ...current,
+                    cloudEndpoint: value,
+                  }))
+                }
+              />
+              <TextField
+                label="API token"
+                description={
+                  settings.hasCloudApiToken
+                    ? "A token is stored. Leave blank to keep it, or enter a new one to replace it."
+                    : "Bearer token for this installation. Stored server-side and never returned to the browser."
+                }
+                value={apiToken}
+                type="password"
+                placeholder={
+                  settings.hasCloudApiToken
+                    ? "•••••••• (stored)"
+                    : "paste token"
+                }
+                onChange={setApiToken}
+              />
+            </div>
+            <div className="grid content-start gap-5 sm:grid-cols-2">
+              <NumericField
+                label="Cloud sync interval"
+                description="Time between cloud upload attempts."
+                value={settings.cloudIntervalSecs}
+                min={5}
+                max={86400}
+                unit="seconds"
+                onChange={(value) => setNumber("cloudIntervalSecs", value)}
+              />
+              <NumericField
+                label="Cloud batch size"
+                description="Maximum events sent per upload."
+                value={settings.cloudBatchSize}
+                min={1}
+                max={1000}
+                unit="events"
+                onChange={(value) => setNumber("cloudBatchSize", value)}
+              />
+              <NumericField
+                label="Retry base delay"
+                description="Initial wait before retrying a failed upload; doubles each attempt."
+                value={settings.cloudRetryBaseSecs}
+                min={1}
+                max={3600}
+                unit="seconds"
+                onChange={(value) => setNumber("cloudRetryBaseSecs", value)}
+              />
+              <NumericField
+                label="Maximum upload attempts"
+                description="After this many failures an event is marked failed and left for manual review."
+                value={settings.cloudMaxAttempts}
+                min={1}
+                max={100}
+                unit="attempts"
+                onChange={(value) => setNumber("cloudMaxAttempts", value)}
               />
             </div>
           </div>
@@ -317,8 +677,8 @@ export function SettingsPanel({
             {saving ? "Saving..." : "Save settings"}
           </button>
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            Intervals apply to the server schedule after saving. Open attendance
-            pages use the new refresh interval when reloaded.
+            Intervals apply to the worker after saving; the running process is
+            never restarted.
           </span>
         </div>
       </form>

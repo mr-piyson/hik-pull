@@ -29,8 +29,21 @@ model Device {
   deviceModel  String?
   deviceSerial String?
 
-  events   LogEvent[]
-  syncLogs UserSyncLog[]
+  /// Synchronization cursor: the highest event observed from this terminal.
+  /// `lastHistorySyncAt` drives the query window; these record the exact point
+  /// so progress is inspectable and late events are provably bounded by the
+  /// stable event key. The Hikvision AcsEvent API itself only accepts time
+  /// windows, so the window is the cursor and the key is the tie-breaker.
+  lastEventTime DateTime?
+  lastEventKey  String?
+  /// Last collection failure for this terminal; cleared on the next success.
+  lastSyncError String?
+  /// Operational state: "online" | "offline" | "error" | "unknown".
+  status        String @default("unknown")
+
+  events         LogEvent[]
+  syncLogs       UserSyncLog[]
+  attendanceLogs AttendanceLog[]
 
   @@index([host])
 }
@@ -52,7 +65,34 @@ model AppSettings {
   facePhotoTargetKB        Int     @default(190)
   maxPhotoUploadMB         Int     @default(10)
 
+  /// Worker control. The attendance worker is always running; these flags
+  /// pause or resume its two independent jobs without restarting any process.
+  hikvisionSyncEnabled Boolean @default(true)
+  hikvisionIntervalSecs Int    @default(30)
+
+  /// Local database -> AWS ingestion. `cloudApiToken` is server-side only and
+  /// is never serialised to the browser, like device passwords.
+  cloudSyncEnabled   Boolean @default(false)
+  cloudIntervalSecs  Int     @default(60)
+  cloudBatchSize     Int     @default(100)
+  cloudRetryBaseSecs Int     @default(30)
+  cloudMaxAttempts   Int     @default(10)
+  cloudEndpoint      String  @default("")
+  cloudApiToken      String  @default("")
+
   @@map("app_settings")
+}
+
+/// Singleton runtime status for the attendance worker, kept separate from the
+/// operator-configurable `AppSettings`. Fixed id, like `AppSettings`.
+model WorkerState {
+  id                 String    @id @default("global")
+  lastHikvisionRunAt DateTime?
+  lastCloudRunAt     DateTime?
+  lastCloudError     String?
+  updatedAt          DateTime  @updatedAt
+
+  @@map("worker_state")
 }
 
 /// API event fields are persisted in separate columns, using the original
@@ -137,6 +177,9 @@ model LogEvent {
 /// general access-event log.
 model AttendanceLog {
   id           String    @id
+  /// Terminal the event came from. Nullable and `SetNull` on delete so
+  /// attendance survives removing a device, as it always has.
+  deviceId     String?   @map("device_id")
   deviceIp     String?   @map("device_ip")
   deviceModel  String?   @map("device_model")
   deviceSerial String?   @map("device_serial")
@@ -148,14 +191,46 @@ model AttendanceLog {
   dateTime     DateTime? @map("datetime")
   timeRaw      String?   @map("time_raw")
 
+  /// Stable upstream identity for cloud deduplication and tenant scoping.
+  eventType      String? @map("event_type")
+  verification   String? @map("verification_mode")
+  organizationId String  @default("default") @map("organization_id")
+
   /// Internal event identity prevents live-stream and history imports from
   /// storing the same terminal event twice.
   sourceKey String @unique @map("_source_key")
 
+  device Device?           @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  outbox CloudSyncOutbox?
+
   @@index([dateTime])
   @@index([personId, dateTime])
   @@index([gateDirection, dateTime])
+  @@index([organizationId, dateTime])
   @@map("attendance_logs")
+}
+
+/// Transactional outbox: one row per attendance event queued for the cloud.
+/// The local database is the durable queue, so a disabled network, a crashed
+/// worker, or a restarted server never loses an event — it stays `PENDING`
+/// until the cloud accepts it.
+model CloudSyncOutbox {
+  id              String    @id
+  attendanceLogId String    @unique @map("attendance_log_id")
+  organizationId  String    @default("default") @map("organization_id")
+  /// "PENDING" | "SYNCED" | "FAILED"
+  status          String    @default("PENDING")
+  attempts        Int       @default(0)
+  lastError       String?
+  nextAttemptAt   DateTime  @default(now())
+  syncedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  attendanceLog AttendanceLog @relation(fields: [attendanceLogId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@map("cloud_sync_outbox")
 }
 
 /// Master user records maintained by this application and synchronized to

@@ -1,0 +1,19 @@
+{
+  "name": "hik-pull-cloud-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "AWS MySQL ingestion API for hik-pull attendance events (Bun).",
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "format": "biome format --write .",
+    "lint": "biome check ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.2",
+    "@types/bun": "^1.2.0",
+    "typescript": "^5"
+  }
+}

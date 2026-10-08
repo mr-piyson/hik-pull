@@ -46,7 +46,7 @@ const MINOR_LABELS: Record<number, string> = {
  * major 5 in `/ISAPI/AccessControl/AcsEvent/capabilities`, which is the
  * device's own statement that they are refusals rather than grants.
  */
-const DENIED_MINORS = new Set([2, 6, 7, 8, 9, 10, 11, 12, 21, 38, 39]);
+export const DENIED_MINORS = new Set([2, 6, 7, 8, 9, 10, 11, 12, 21, 38, 39]);
 const DOOR_MINORS = new Set([75, 76, 81, 82]);
 /** Known-good authentications. Face-comparison codes are firmware-specific
  * and therefore intentionally absent — they land in `other` until surveyed. */
@@ -126,6 +126,25 @@ function asNumber(value: unknown): number | null {
 }
 
 /**
+ * `currentVerifyMode` is a plain string on the history endpoint but an entity
+ * on the live stream, e.g. `{ face: true }`. Coerce both to a comma-joined
+ * list of the methods the device reports as used, so the value stored on an
+ * attendance row is meaningful regardless of which path saw the event.
+ */
+function asVerifyMode(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value.trim() || null;
+  }
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    const methods = Object.entries(value as Record<string, unknown>)
+      .filter(([, enabled]) => enabled === true || enabled === "true")
+      .map(([name]) => name);
+    return methods.length > 0 ? methods.join(",") : null;
+  }
+  return null;
+}
+
+/**
  * Normalize one chunk from `/ISAPI/Event/notification/alertStream`.
  * Returns `null` for chunks that are not access-control events.
  */
@@ -168,6 +187,7 @@ export function normalizeLiveChunk(
     cardNo: asString(raw.cardNo),
     readerNo: asNumber(raw.cardReaderNo),
     serialNo: serialNo || null,
+    verifyMode: asVerifyMode(raw.currentVerifyMode),
     source: "live",
   };
 }
@@ -202,6 +222,7 @@ export function normalizeHistoryItem(
     cardNo: asString(item.cardNo),
     readerNo: asNumber(item.cardReaderNo),
     serialNo,
+    verifyMode: asVerifyMode(item.currentVerifyMode),
     source: "backfill",
   };
 }

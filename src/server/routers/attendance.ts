@@ -8,7 +8,10 @@ export const attendanceRouter = router({
       z.object({
         offset: z.number().int().min(0).max(2_147_483_647).default(0),
         limit: z.number().int().min(1).max(500).default(100),
+        syncStatus: z.enum(["PENDING", "SYNCED", "FAILED"]).optional(),
       }),
     )
-    .query(({ input }) => listAttendanceLogs(input.offset, input.limit)),
+    .query(({ input }) =>
+      listAttendanceLogs(input.offset, input.limit, input.syncStatus),
+    ),
 });
