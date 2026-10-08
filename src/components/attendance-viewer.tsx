@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AttendanceLogEntry } from "@/lib/hik/attendance-store";
 import { trpc } from "@/trpc/client";
 
@@ -42,6 +42,45 @@ export function AttendanceViewer({
   const [total, setTotal] = useState(initialPage.total);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const page = await trpc.attendance.list.query({ offset: 0, limit: 100 });
+      setLogs((current) => {
+        const byId = new Map(current.map((log) => [log.id, log]));
+        for (const log of page.logs) {
+          byId.set(log.id, log);
+        }
+        return Array.from(byId.values()).sort((left, right) => {
+          const leftTime = left.dateTime
+            ? new Date(left.dateTime).getTime()
+            : Number.NEGATIVE_INFINITY;
+          const rightTime = right.dateTime
+            ? new Date(right.dateTime).getTime()
+            : Number.NEGATIVE_INFINITY;
+          return rightTime - leftTime || right.id.localeCompare(left.id);
+        });
+      });
+      setHasMore(page.hasMore);
+      setTotal(page.total);
+      setError(null);
+      setLastUpdated(new Date());
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not refresh attendance logs.",
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void refresh();
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [refresh]);
 
   const loadMore = async () => {
     setLoading(true);
@@ -72,10 +111,10 @@ export function AttendanceViewer({
           Attendance
         </p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-          Successful authentications
+          Person events
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
-          Successful person-authentication events captured from configured
+          Events containing person ID, name, or card data from configured
           terminals. Device time is retained verbatim in the raw time column.
         </p>
         <p className="mt-1 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
@@ -96,6 +135,11 @@ export function AttendanceViewer({
           <h2 className="font-semibold">Attendance records</h2>
           <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
             Showing {logs.length} of {total}
+          </span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">
+            {lastUpdated
+              ? `Updated ${lastUpdated.toLocaleTimeString()}`
+              : "Auto-refreshes every 10 seconds"}
           </span>
         </div>
         <div className="overflow-x-auto">

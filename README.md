@@ -3,7 +3,7 @@
 A self-hosted Hikvision access manager. It stores master user records in
 SQLite, pushes identity and card changes to configured terminals, records each
 per-device sync result, backfills the access-control event log, and streams
-new events live. Successful authentications are also retained in a dedicated
+new events live. Events containing person data are also retained in a dedicated
 attendance table and page.
 
 Built and tested against a DS-K1T671MF-class face/card terminal.
@@ -66,7 +66,7 @@ database elsewhere, set `DATABASE_URL` (e.g.
 | `User` | Master directory: identity, location, person type, validity, up to five cards, authentication settings and optimized face photo |
 | `UserSyncLog` | Per-device success/failure history for every user sync attempt |
 | `LogEvent` | Every access event seen from a device |
-| `AttendanceLog` (`attendance_logs`) | Successful authentication events, including device direction and original timestamp details |
+| `AttendanceLog` (`attendance_logs`) | Access events with person data, including device direction and original timestamp details |
 
 Employee numbers are unique in the master directory. Creating, updating,
 deleting, or retrying a user sends the change to all configured devices. A
@@ -111,7 +111,7 @@ finish — a slow disk must never stall the reader, because the device drops a
 connection that falls behind, and losing that costs far more events than one
 failed insert.
 
-Successful authentications are copied from both live events and history
+Access events carrying person data are copied from both live events and history
 backfills to the single indexed `attendance_logs` table. Each row stores the
 device address (`host:port`), model, serial, event serial number, person
 ID/name, card number, parsed date-time, original device timestamp, and the
@@ -119,20 +119,14 @@ device's `In`, `Out`, or `None` gate direction when that event was recorded.
 The gate direction is a snapshot: changing a device's setting affects future
 events and does not rewrite historical attendance. A private event key
 deduplicates the same event seen by both ingestion paths. Attendance rows are
-not deleted when a device is removed. Only events classified as granted by the
-current event-code map are included; unrecognized device-specific face codes
-remain unclassified until they can be confirmed. Logs are retained even when
-the device omits person identifiers in the general event log, but an attendance
-row is created or displayed only when both the person ID and person name are
-present and non-empty. `None` direction does not exclude a successful event.
-If a terminal reports a generic grant with no person fields, the collector
-correlates it with the nearest person-attributed `door opened` event (minor
-code 75) from the same device within 10 seconds. The attendance row retains
-the grant event's serial and timestamp and takes identity from the correlated
-door event.
-Collection happens while a device live stream is running or when its event
-history is pulled from the Access events page; the attendance page displays
-saved records and does not start device connections on its own.
+not deleted when a device is removed. Attendance does not filter by grant,
+denied, door, or other event classification. An event is saved as an attendance
+row whenever it includes any non-empty person ID, person name, or card number;
+events with no person data are skipped. Identity is taken directly from that
+event, without correlating it to neighboring events.
+The server starts live collection for configured devices at startup and when
+devices are added or updated. The attendance page refreshes saved records
+automatically every 10 seconds.
 
 All months share this one table rather than dynamically created monthly
 tables. `dateTime` is indexed for month/date queries, and `gateDirection` is
@@ -222,7 +216,7 @@ JSON operations use the typed tRPC endpoint at `/api/trpc`:
 - `events.get` loads event history for a terminal.
 - `users.list`, `users.get`, `users.create`, `users.update`, `users.remove`,
   `users.sync`, and `users.enrollFingerprint` manage people and device sync.
-- `attendance.list` pages through successful attendance records.
+- `attendance.list` pages through attendance events carrying person data.
 
 `events.get` accepts `from`, `to`, `limit`, `direction` (`in` \| `denied` \|
 `door` \| `other`) and `refresh`. Reads always come from SQLite, so history

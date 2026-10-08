@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { prisma } from "@/lib/hik/db";
-import { probeDevice, stopDevice } from "@/lib/hik/registry";
+import { probeDevice, startDevice, stopDevice } from "@/lib/hik/registry";
 import {
   assertHost,
   assertPassword,
@@ -94,6 +94,7 @@ export const devicesRouter = router({
         model: info.model,
         serial: info.serialNumber,
       });
+      startDevice(saved);
       return { device: toPublicDevice(saved), info };
     } catch (error) {
       throw new TRPCError({
@@ -126,7 +127,9 @@ export const devicesRouter = router({
         } catch (error) {
           return badRequest(error);
         }
-        saved.push(await saveDevice(device));
+        const savedDevice = await saveDevice(device);
+        startDevice(savedDevice);
+        saved.push(savedDevice);
       }
       return { devices: saved.map(toPublicDevice) };
     }),
@@ -174,6 +177,10 @@ export const devicesRouter = router({
       }
 
       const saved = await saveDevice(next, metadata ?? undefined);
+      if (changedCredentials) {
+        stopDevice(saved.id);
+      }
+      startDevice(saved);
       return { device: toPublicDevice(saved) };
     }),
 
