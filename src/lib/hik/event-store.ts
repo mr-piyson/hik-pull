@@ -78,7 +78,7 @@ type EventCreate = Prisma.LogEventCreateManyInput;
 type JsonColumn = Prisma.InputJsonValue | typeof Prisma.JsonNull;
 
 function jsonColumn(value: unknown): JsonColumn {
-  if (value === null) {
+  if (value === null || value === undefined) {
     return Prisma.JsonNull;
   }
   if (
@@ -88,7 +88,39 @@ function jsonColumn(value: unknown): JsonColumn {
   ) {
     return value;
   }
-  throw new Error("An API event field has an unsupported non-scalar value.");
+  // The column is JSON, so keep structured values verbatim instead of failing
+  // the whole batch: firmware differs on which fields are scalars.
+  if (Array.isArray(value) || typeof value === "object") {
+    return value as Prisma.InputJsonValue;
+  }
+  return Prisma.JsonNull;
+}
+
+/**
+ * Devices add fields between firmware revisions. A field with no column is
+ * dropped rather than rejected — one unknown field must never block an entire
+ * history window. Each field name is reported once so a survey can still spot
+ * schema drift.
+ */
+const warnedUnknownFields = new Set<string>();
+
+function warnUnknownFields(
+  scope: string,
+  deviceId: string,
+  fields: string[],
+): void {
+  const fresh = fields.filter(
+    (field) => !warnedUnknownFields.has(`${scope}:${field}`),
+  );
+  if (fresh.length === 0) {
+    return;
+  }
+  for (const field of fresh) {
+    warnedUnknownFields.add(`${scope}:${field}`);
+  }
+  console.warn(
+    `[events] Ignoring unmapped ${scope} field(s) from device ${deviceId}: ${fresh.join(", ")}.`,
+  );
 }
 
 function recordValue(
@@ -149,17 +181,13 @@ export function mapApiEventFields(
           column,
         );
       }
-    } else if (faceRect !== undefined && faceRect !== null) {
-      throw new Error(`FaceRect on event ${deviceId}/${id} is not an object.`);
     }
     const knownFields = new Set([...Object.keys(HISTORY_FIELDS), "FaceRect"]);
     const unknownFields = Object.keys(payload).filter(
       (field) => !knownFields.has(field),
     );
     if (unknownFields.length > 0) {
-      throw new Error(
-        `Unmapped history API fields on event ${deviceId}/${id}: ${unknownFields.join(", ")}.`,
-      );
+      warnUnknownFields("history", deviceId, unknownFields);
     }
   } else {
     for (const [field, column] of Object.entries(LIVE_FIELDS)) {
@@ -179,14 +207,12 @@ export function mapApiEventFields(
         (field) => !Object.hasOwn(LIVE_ACCESS_FIELDS, field),
       );
       if (unknownAccessFields.length > 0) {
-        throw new Error(
-          `Unmapped AccessControllerEvent API fields on event ${deviceId}/${id}: ${unknownAccessFields.join(", ")}.`,
+        warnUnknownFields(
+          "live AccessControllerEvent",
+          deviceId,
+          unknownAccessFields,
         );
       }
-    } else if (accessEvent !== undefined && accessEvent !== null) {
-      throw new Error(
-        `AccessControllerEvent on event ${deviceId}/${id} is not an object.`,
-      );
     }
     const knownFields = new Set([
       ...Object.keys(LIVE_FIELDS),
@@ -196,9 +222,7 @@ export function mapApiEventFields(
       (field) => !knownFields.has(field),
     );
     if (unknownFields.length > 0) {
-      throw new Error(
-        `Unmapped live API fields on event ${deviceId}/${id}: ${unknownFields.join(", ")}.`,
-      );
+      warnUnknownFields("live", deviceId, unknownFields);
     }
   }
 
@@ -275,19 +299,25 @@ export async function recordEvents(
   if (events.length === 0) {
     return 0;
   }
-  const rows = events.map((event) => {
-    if (event.rawPayload === undefined) {
-      throw new Error(
-        `Event ${event.deviceId}/${event.id} has no original API payload.`,
+  // A single unreadable payload must not abort the whole batch (and, for
+  // history, must not block the checkpoint). Skip it loudly and keep going.
+  const rows: EventCreate[] = [];
+  for (const event of events) {
+    try {
+      if (event.rawPayload === undefined) {
+        throw new Error("no original API payload");
+      }
+      rows.push(
+        mapApiEventFields(device.id, event.id, event.source, event.rawPayload),
+      );
+    } catch (error) {
+      console.error(
+        `[events] Skipping unreadable event ${event.deviceId}/${event.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
       );
     }
-    return mapApiEventFields(
-      device.id,
-      event.id,
-      event.source,
-      event.rawPayload,
-    );
-  });
+  }
 
   let inserted = 0;
   for (let index = 0; index < rows.length; index += INSERT_CHUNK) {

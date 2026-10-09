@@ -13,10 +13,6 @@ if (env.allowPublicKeyRetrieval) {
   options.allowPublicKeyRetrieval = true;
 }
 
-/**
- * Native Bun MySQL client (no npm driver). The adapter is auto-detected from
- * the `mysql://` (or `mysql2://`) connection string.
- */
 export const db = new SQL(env.databaseUrl, options);
 
 export function errorMessage(error: unknown): string {

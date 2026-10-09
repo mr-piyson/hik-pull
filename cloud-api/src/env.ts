@@ -43,10 +43,10 @@ function requiredUrl(): string {
 }
 
 /**
- * Tokens are "name:token" or "name:token:organizationId". The name is the part
- * before the first colon; the token is everything after it (tokens may contain
- * colons), and the trailing ":organizationId" is optional and defaults to
- * "default".
+ * Tokens are "name:token" or "name:token:organizationId", comma-separated.
+ * Parsing is exact: each entry must have exactly two or three colon-separated
+ * segments, so a token can never be split ambiguously. Tokens therefore must
+ * not contain colons (generated tokens are hex, so this always holds).
  */
 function parseTokens(raw: string | undefined): TokenSeed[] {
   if (!raw) {
@@ -58,31 +58,24 @@ function parseTokens(raw: string | undefined): TokenSeed[] {
     if (!trimmed) {
       continue;
     }
-    const colon = trimmed.indexOf(":");
-    if (colon <= 0) {
+    const parts = trimmed.split(":").map((part) => part.trim());
+    if (parts.length !== 2 && parts.length !== 3) {
       throw new Error(
-        `API_TOKENS entry "${trimmed}" must look like name:token or name:token:organizationId.`,
+        `API_TOKENS entry "${trimmed}" must have exactly two or three colon-separated segments: name:token[:organizationId]. Tokens must not contain colons.`,
       );
     }
-    const name = trimmed.slice(0, colon).trim();
-    let rest = trimmed.slice(colon + 1).trim();
-    let organizationId = "default";
-    const lastColon = rest.lastIndexOf(":");
-    // A third segment is only treated as the organization when it holds no
-    // whitespace; this keeps generated tokens (which are colon-free) intact.
-    if (lastColon > 0) {
-      const maybeOrg = rest.slice(lastColon + 1).trim();
-      if (maybeOrg && !/\s/.test(maybeOrg)) {
-        organizationId = maybeOrg;
-        rest = rest.slice(0, lastColon).trim();
-      }
-    }
-    if (!name || !rest) {
+    const [name, token, organizationId = "default"] = parts;
+    if (!name || !token) {
       throw new Error(
         `API_TOKENS entry "${trimmed}" is missing a name or token.`,
       );
     }
-    seeds.push({ name, token: rest, organizationId });
+    if (parts.length === 3 && !organizationId) {
+      throw new Error(
+        `API_TOKENS entry "${trimmed}" has an empty organizationId.`,
+      );
+    }
+    seeds.push({ name, token, organizationId });
   }
   return seeds;
 }

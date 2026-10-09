@@ -99,9 +99,15 @@ async function handleList(request: Request): Promise<Response> {
   }
 
   const url = new URL(request.url);
-  const organizationId =
-    url.searchParams.get("organizationId")?.trim() ||
-    installation.organizationId;
+  const requested = url.searchParams.get("organizationId")?.trim();
+  // A token is only ever allowed to read its own organization.
+  if (requested && requested !== installation.organizationId) {
+    return json(
+      { error: "Token is not authorized for the requested organization" },
+      { status: 403 },
+    );
+  }
+  const organizationId = installation.organizationId;
   const events = await listEvents({
     organizationId,
     from: dateParam(url.searchParams.get("from")),

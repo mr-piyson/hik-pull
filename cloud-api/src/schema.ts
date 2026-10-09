@@ -51,14 +51,22 @@ export async function migrate(): Promise<void> {
  * Seed bearer tokens from `API_TOKENS` into `installations`. Idempotent:
  * re-running with the same token refreshes its name/organization and
  * reactivates it instead of creating a duplicate (unique on token_hash).
+ *
+ * Installations whose token is no longer configured are deactivated, so
+ * removing a token from `API_TOKENS` revokes access on the next boot instead
+ * of leaving it valid forever.
  */
 export async function seedTokens(): Promise<number> {
   if (env.apiTokens.length === 0) {
+    // Never mass-deactivate when the list is empty: that is far more likely a
+    // misconfiguration than a deliberate revoke-everything.
     return 0;
   }
   const now = new Date();
+  const activeHashes = new Set<string>();
   for (const seed of env.apiTokens) {
     const tokenHash = await sha256Hex(seed.token);
+    activeHashes.add(tokenHash);
     await db`
       INSERT INTO installations
         (id, name, token_hash, organization_id, active, created_at, updated_at)
@@ -70,6 +78,15 @@ export async function seedTokens(): Promise<number> {
         active = 1,
         updated_at = ${now}
     `;
+  }
+
+  const stillActive = await db<
+    { id: string; token_hash: string }[]
+  >`SELECT id, token_hash FROM installations WHERE active = 1`;
+  for (const row of stillActive) {
+    if (!activeHashes.has(row.token_hash)) {
+      await db`UPDATE installations SET active = 0, updated_at = ${now} WHERE id = ${row.id}`;
+    }
   }
   return env.apiTokens.length;
 }

@@ -1,5 +1,8 @@
 import { CloudSyncError, postAttendanceBatch } from "@/lib/cloud/client";
-import type { CloudAttendanceEvent } from "@/lib/cloud/types";
+import type {
+  CloudAttendanceEvent,
+  CloudBatchResponse,
+} from "@/lib/cloud/types";
 import { prisma } from "@/lib/hik/db";
 import type { AppSettings } from "@/lib/hik/settings-store";
 
@@ -60,10 +63,17 @@ export async function runCloudSync(
     occurredAt: row.attendanceLog.dateTime?.toISOString() ?? null,
   }));
 
+  let response: CloudBatchResponse;
   try {
-    await postAttendanceBatch(settings.cloudEndpoint, token, events);
+    response = await postAttendanceBatch(settings.cloudEndpoint, token, events);
   } catch (error) {
     return recordFailure(batch, error, settings, now);
+  }
+
+  // A 2xx can still carry per-event validation failures. Never mark a rejected
+  // event `SYNCED`: that is the one way an event could be silently lost.
+  if ((response.rejected ?? 0) > 0) {
+    return recordRejected(batch, response, settings, now);
   }
 
   await prisma.cloudSyncOutbox.updateMany({
@@ -79,6 +89,101 @@ export async function runCloudSync(
     attempted: batch.length,
     synced: batch.length,
     failed: 0,
+    skipped: false,
+  };
+}
+
+/**
+ * Split a batch the endpoint partly rejected. When the response names the
+ * rejected indices, accepted rows are marked `SYNCED` and rejected rows
+ * `FAILED` (validation is deterministic, so retrying cannot help). When more
+ * rows were rejected than were named — the API only details the first 50 — we
+ * cannot tell which are safe, so the whole batch is requeued; the cloud's
+ * `source_event_key` uniqueness makes re-sending already-accepted rows a no-op.
+ */
+async function recordRejected(
+  batch: { id: string; attempts: number }[],
+  response: CloudBatchResponse,
+  settings: AppSettings,
+  now: Date,
+): Promise<CloudSyncResult> {
+  const rejected = response.rejected ?? 0;
+  const rejectedById = new Map<number, string>();
+  for (const detail of response.errors ?? []) {
+    if (
+      Number.isInteger(detail?.index) &&
+      detail.index >= 0 &&
+      detail.index < batch.length
+    ) {
+      rejectedById.set(detail.index, detail.reason || "Rejected by the cloud.");
+    }
+  }
+  const fullyIdentified = rejectedById.size >= rejected;
+
+  const syncedIds: string[] = [];
+  const failedIds: string[] = [];
+  const retryIds: { id: string; attempts: number }[] = [];
+
+  batch.forEach((row, index) => {
+    if (rejectedById.has(index)) {
+      failedIds.push(row.id);
+    } else if (fullyIdentified) {
+      syncedIds.push(row.id);
+    } else {
+      retryIds.push(row);
+    }
+  });
+
+  if (syncedIds.length > 0) {
+    await prisma.cloudSyncOutbox.updateMany({
+      where: { id: { in: syncedIds } },
+      data: {
+        status: "SYNCED",
+        syncedAt: now,
+        lastError: null,
+        attempts: { increment: 1 },
+      },
+    });
+  }
+
+  if (failedIds.length > 0) {
+    await prisma.cloudSyncOutbox.updateMany({
+      where: { id: { in: failedIds } },
+      data: {
+        status: "FAILED",
+        attempts: { increment: 1 },
+        lastError: "Rejected by the cloud ingestion API.",
+        nextAttemptAt: now,
+      },
+    });
+  }
+
+  let retryFailed = 0;
+  for (const row of retryIds) {
+    const attempts = row.attempts + 1;
+    const giveUp = attempts >= settings.cloudMaxAttempts;
+    const delaySecs = Math.min(
+      settings.cloudRetryBaseSecs * 2 ** (attempts - 1),
+      MAX_BACKOFF_SECS,
+    );
+    await prisma.cloudSyncOutbox.update({
+      where: { id: row.id },
+      data: {
+        attempts,
+        lastError: `${rejected} event(s) rejected without a per-event index.`,
+        status: giveUp ? "FAILED" : "PENDING",
+        nextAttemptAt: new Date(now.getTime() + delaySecs * 1_000),
+      },
+    });
+    if (giveUp) {
+      retryFailed += 1;
+    }
+  }
+
+  return {
+    attempted: batch.length,
+    synced: syncedIds.length,
+    failed: failedIds.length + retryFailed,
     skipped: false,
   };
 }

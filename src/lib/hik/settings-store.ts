@@ -60,11 +60,15 @@ export function toPublicSettings(settings: AppSettings): PublicAppSettings {
 }
 
 export async function getAppSettings(): Promise<AppSettings> {
-  const row = await prisma.appSettings.upsert({
-    where: { id: "global" },
-    create: { id: "global" },
-    update: {},
-  });
+  // Read first: this runs every worker tick, and an unconditional upsert would
+  // be a write every few seconds for a row that almost never changes.
+  const row =
+    (await prisma.appSettings.findUnique({ where: { id: "global" } })) ??
+    (await prisma.appSettings.upsert({
+      where: { id: "global" },
+      create: { id: "global" },
+      update: {},
+    }));
   return {
     autoStartLiveStreams: row.autoStartLiveStreams,
     historySyncEnabled: row.historySyncEnabled,
@@ -116,18 +120,22 @@ export async function saveAppSettings(
 
 export type WorkerStatus = {
   lastHikvisionRunAt: string | null;
+  lastHikvisionError: string | null;
   lastCloudRunAt: string | null;
   lastCloudError: string | null;
 };
 
 export async function getWorkerStatus(): Promise<WorkerStatus> {
-  const row = await prisma.workerState.upsert({
-    where: { id: "global" },
-    create: { id: "global" },
-    update: {},
-  });
+  const row =
+    (await prisma.workerState.findUnique({ where: { id: "global" } })) ??
+    (await prisma.workerState.upsert({
+      where: { id: "global" },
+      create: { id: "global" },
+      update: {},
+    }));
   return {
     lastHikvisionRunAt: row.lastHikvisionRunAt?.toISOString() ?? null,
+    lastHikvisionError: row.lastHikvisionError,
     lastCloudRunAt: row.lastCloudRunAt?.toISOString() ?? null,
     lastCloudError: row.lastCloudError,
   };
@@ -140,7 +148,10 @@ export async function recordWorkerRun(
   const now = new Date();
   const data =
     job === "hikvision"
-      ? { lastHikvisionRunAt: now }
+      ? {
+          lastHikvisionRunAt: now,
+          lastHikvisionError: options.error ?? null,
+        }
       : {
           lastCloudRunAt: now,
           lastCloudError: options.error ?? null,

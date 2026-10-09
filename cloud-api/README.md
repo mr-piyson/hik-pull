@@ -38,9 +38,13 @@ bun run start             # production
 | `AUTO_MIGRATE` | no | `0` to skip table creation on boot. Default on. |
 
 `API_TOKENS` entries look like `name:token` or `name:token:organizationId`
-(organization defaults to `default`). Tokens are hashed with SHA-256 before
-storage, so the database never holds a usable secret. Seeding is idempotent and
-runs on every boot.
+(organization defaults to `default`). Each entry must have exactly two or three
+colon-separated segments, so tokens must not contain a colon (generated tokens
+are hex, so this always holds). Tokens are hashed with SHA-256 before storage,
+so the database never holds a usable secret. Seeding is idempotent and runs on
+every boot; removing a token from `API_TOKENS` deactivates its installation, so
+the token stops authenticating. The organization is taken from the token, not
+the request body — a token can only write to and read its own organization.
 
 ```sh
 API_TOKENS="warehouse:8f3c…long-random…,shop:9a1b…other…:retail"

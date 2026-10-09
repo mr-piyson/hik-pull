@@ -86,11 +86,12 @@ model AppSettings {
 /// Singleton runtime status for the attendance worker, kept separate from the
 /// operator-configurable `AppSettings`. Fixed id, like `AppSettings`.
 model WorkerState {
-  id                 String    @id @default("global")
-  lastHikvisionRunAt DateTime?
-  lastCloudRunAt     DateTime?
-  lastCloudError     String?
-  updatedAt          DateTime  @updatedAt
+  id                  String    @id @default("global")
+  lastHikvisionRunAt  DateTime?
+  lastHikvisionError  String?
+  lastCloudRunAt      DateTime?
+  lastCloudError      String?
+  updatedAt           DateTime  @updatedAt
 
   @@map("worker_state")
 }

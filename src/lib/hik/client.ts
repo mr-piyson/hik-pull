@@ -528,8 +528,15 @@ const FALLBACK_CAPABILITIES: AcsEventCapabilities = {
   majors: [0, 1, 2, 3, 5],
 };
 
-let capabilitiesCache: { key: string; value: AcsEventCapabilities } | null =
-  null;
+/** Capability limits are stable but not eternal: re-read them periodically so
+ * a firmware update or a swapped terminal at the same address self-heals. */
+const CAPABILITIES_TTL_MS = 10 * 60_000;
+
+let capabilitiesCache: {
+  key: string;
+  value: AcsEventCapabilities;
+  at: number;
+} | null = null;
 
 function parseNumberAttr(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
@@ -552,7 +559,10 @@ export async function getAcsEventCapabilities(
   device: DeviceCredentials,
 ): Promise<AcsEventCapabilities> {
   const cacheKey = `${device.scheme}://${device.host}:${device.port}`;
-  if (capabilitiesCache?.key === cacheKey) {
+  if (
+    capabilitiesCache?.key === cacheKey &&
+    Date.now() - capabilitiesCache.at < CAPABILITIES_TTL_MS
+  ) {
     return capabilitiesCache.value;
   }
 
@@ -580,6 +590,7 @@ export async function getAcsEventCapabilities(
 
     capabilitiesCache = {
       key: cacheKey,
+      at: Date.now(),
       value: {
         maxResults: {
           min: minResults ?? 1,
@@ -632,8 +643,12 @@ export async function* searchAcsEvents(
 
   for (const major of capabilities.majors) {
     let position = 0;
-    for (let page = 0; page < maxPages; page += 1) {
+    // One request past the cap acts as a probe: if it still returns rows there
+    // is more history than we are willing to page, so fail loudly rather than
+    // let the caller advance its checkpoint past events it never read.
+    for (let pageIndex = 0; pageIndex <= maxPages; pageIndex += 1) {
       options.signal?.throwIfAborted();
+      const isProbe = pageIndex === maxPages;
 
       const response = await isapiRequest(
         device,
@@ -665,8 +680,8 @@ export async function* searchAcsEvents(
       }
 
       const text = await response.text();
-      const page = tryParseBody(text);
-      if (!page) {
+      const body = tryParseBody(text);
+      if (!body) {
         throw new HikRequestError(
           `AcsEvent search (major=${major}) returned an unreadable body`,
           response.status,
@@ -674,10 +689,17 @@ export async function* searchAcsEvents(
         );
       }
 
-      const acsEvent = page.AcsEvent as Record<string, unknown> | undefined;
+      const acsEvent = body.AcsEvent as Record<string, unknown> | undefined;
       const infoList = acsEvent?.InfoList;
       if (!Array.isArray(infoList) || infoList.length === 0) {
         break;
+      }
+      if (isProbe) {
+        throw new HikRequestError(
+          `AcsEvent search (major=${major}) exceeded ${maxPages} pages. Narrow the history window or sync interval so no events are skipped.`,
+          0,
+          null,
+        );
       }
 
       for (const item of infoList) {

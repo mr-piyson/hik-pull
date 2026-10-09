@@ -19,6 +19,9 @@ export type CloudAttendanceEvent = {
 
 export type CloudBatchResponse = {
   accepted?: number;
+  duplicates?: number;
   rejected?: number;
+  received?: number;
+  errors?: { index: number; reason: string }[];
   [key: string]: unknown;
 };

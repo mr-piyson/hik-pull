@@ -173,13 +173,18 @@ stays `PENDING` until the cloud accepts it.
 
 Each upload batch is POSTed to `${cloudEndpoint}/attendance/batch` with
 `Authorization: Bearer <token>`. Events are marked `SYNCED` only after a 2xx
-response; on a retryable failure the batch backs off exponentially
-(`cloudRetryBaseSecs`, doubling) up to `cloudMaxAttempts`, after which rows are
-marked `FAILED` for inspection. Every event carries its stable `sourceEventKey`,
-so a batch that a timeout made look failed can be safely resent and
-deduplicated upstream. The API token is stored server-side and never returned
-to the browser; set `CLOUD_API_TOKEN` in the environment to override the stored
-value.
+response **with no per-event rejections**: if the endpoint reports events it
+refused, those rows are marked `FAILED` (validation is deterministic, so
+retrying cannot help) and the rest `SYNCED`. If the endpoint reports more
+rejections than it names individually, the whole batch is requeued, since
+re-sending is safe — the cloud deduplicates on `sourceEventKey`. On a retryable
+failure the batch backs off exponentially (`cloudRetryBaseSecs`, doubling) up to
+`cloudMaxAttempts`, after which rows are marked `FAILED` for inspection. Every
+event carries its stable `sourceEventKey`, so a batch that a timeout made look
+failed can be safely resent and deduplicated upstream. The organization is taken
+from the API token, not the request body, so a token can only write to its own
+organization. The API token is stored server-side and never returned to the
+browser; set `CLOUD_API_TOKEN` in the environment to override the stored value.
 
 The worker is designed to be embedded in a long-running Node server
 (`next start`), which matches the deployment constraint below. It is not usable

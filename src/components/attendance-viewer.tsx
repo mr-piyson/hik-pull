@@ -19,6 +19,16 @@ function display(value: string | null): string {
   return value ?? "—";
 }
 
+function sortLogs(left: AttendanceLogEntry, right: AttendanceLogEntry): number {
+  const leftTime = left.dateTime
+    ? new Date(left.dateTime).getTime()
+    : Number.NEGATIVE_INFINITY;
+  const rightTime = right.dateTime
+    ? new Date(right.dateTime).getTime()
+    : Number.NEGATIVE_INFINITY;
+  return rightTime - leftTime || right.id.localeCompare(left.id);
+}
+
 function displayDateTime(value: string | null): string {
   if (!value) {
     return "—";
@@ -66,6 +76,11 @@ export function AttendanceViewer({
   refreshSeconds: number;
 }) {
   const [logs, setLogs] = useState(initialPage.logs);
+  // Rows fetched from the server so far, used as the next `Load more` offset.
+  // Tracked separately from `logs.length` because the live refresh merges new
+  // rows into `logs`, which would otherwise over-advance the offset and skip
+  // records.
+  const [loadedCount, setLoadedCount] = useState(initialPage.logs.length);
   const [hasMore, setHasMore] = useState(initialPage.hasMore);
   const [total, setTotal] = useState(initialPage.total);
   const [loading, setLoading] = useState(false);
@@ -90,15 +105,7 @@ export function AttendanceViewer({
         for (const log of page.logs) {
           byId.set(log.id, log);
         }
-        return Array.from(byId.values()).sort((left, right) => {
-          const leftTime = left.dateTime
-            ? new Date(left.dateTime).getTime()
-            : Number.NEGATIVE_INFINITY;
-          const rightTime = right.dateTime
-            ? new Date(right.dateTime).getTime()
-            : Number.NEGATIVE_INFINITY;
-          return rightTime - leftTime || right.id.localeCompare(left.id);
-        });
+        return Array.from(byId.values()).sort(sortLogs);
       });
       setHasMore(page.hasMore);
       setTotal(page.total);
@@ -124,6 +131,7 @@ export function AttendanceViewer({
           return;
         }
         setLogs(page.logs);
+        setLoadedCount(page.logs.length);
         setHasMore(page.hasMore);
         setTotal(page.total);
         setLastUpdated(new Date());
@@ -148,9 +156,16 @@ export function AttendanceViewer({
     setError(null);
     try {
       const page = await trpc.attendance.list.query(
-        queryInput(logs.length, 100),
+        queryInput(loadedCount, 100),
       );
-      setLogs((current) => [...current, ...page.logs]);
+      setLogs((current) => {
+        const byId = new Map(current.map((log) => [log.id, log]));
+        for (const log of page.logs) {
+          byId.set(log.id, log);
+        }
+        return Array.from(byId.values()).sort(sortLogs);
+      });
+      setLoadedCount((count) => count + page.logs.length);
       setHasMore(page.hasMore);
       setTotal(page.total);
     } catch (failure) {

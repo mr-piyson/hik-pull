@@ -22,10 +22,14 @@ function clamp(value: string | null, max: number): string | null {
  * Validate and shape one inbound event. Only `sourceEventKey` is mandatory;
  * everything else is coerced to a bounded string or null so one malformed
  * field cannot reject an otherwise good attendance record.
+ *
+ * The organization is taken from the authenticated installation, never from
+ * the request body: a token must not be able to write into another tenant's
+ * data by asserting an `organizationId`.
  */
 export function normalizeEvent(
   raw: unknown,
-  defaultOrganizationId: string,
+  organizationId: string,
 ): { event: NormalizedEvent } | { error: string } {
   if (typeof raw !== "object" || raw === null) {
     return { error: "event must be a JSON object" };
@@ -36,9 +40,6 @@ export function normalizeEvent(
   if (!sourceEventKey) {
     return { error: "sourceEventKey is required" };
   }
-
-  const organizationId =
-    asString(record.organizationId) ?? defaultOrganizationId;
 
   let occurredAt: Date | null = null;
   const rawOccurredAt = record.occurredAt;
@@ -51,7 +52,7 @@ export function normalizeEvent(
 
   return {
     event: {
-      organizationId: clamp(organizationId, 128) ?? defaultOrganizationId,
+      organizationId: clamp(organizationId, 128) ?? "default",
       sourceEventKey: clamp(sourceEventKey, 191) ?? sourceEventKey,
       deviceId: clamp(asString(record.deviceId), 191),
       deviceSerial: clamp(asString(record.deviceSerial), 191),

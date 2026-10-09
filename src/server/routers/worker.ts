@@ -22,6 +22,7 @@ export const workerRouter = router({
       configured: Boolean(settings.cloudEndpoint && settings.cloudApiToken),
       endpoint: settings.cloudEndpoint,
       lastHikvisionRunAt: worker.lastHikvisionRunAt,
+      lastHikvisionError: worker.lastHikvisionError,
       lastCloudRunAt: worker.lastCloudRunAt,
       lastCloudError: worker.lastCloudError,
       queue,

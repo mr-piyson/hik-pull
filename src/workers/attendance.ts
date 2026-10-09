@@ -89,11 +89,19 @@ async function tick(): Promise<void> {
   }
 
   if (!state.outboxBackfilled) {
-    state.outboxBackfilled = true;
-    const queued = await backfillCloudOutbox();
-    if (queued > 0) {
-      console.info(
-        `[worker] Queued ${queued} pre-existing attendance event(s) for cloud sync.`,
+    // Only latch once the backfill actually succeeds, so a transient failure is
+    // retried on the next tick instead of stranding pre-outbox rows forever.
+    try {
+      const queued = await backfillCloudOutbox();
+      state.outboxBackfilled = true;
+      if (queued > 0) {
+        console.info(
+          `[worker] Queued ${queued} pre-existing attendance event(s) for cloud sync.`,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[worker] Outbox backfill failed (will retry): ${messageOf(error)}`,
       );
     }
   }
@@ -138,19 +146,29 @@ async function runHikvisionJob(settings: AppSettings): Promise<void> {
     return;
   }
 
+  let succeeded = 0;
+  let failed = 0;
+  let lastError: string | null = null;
   for (const device of devices) {
     try {
       const result = await syncDeviceHistory(device, settings);
+      succeeded += 1;
       console.info(
         `[worker] Hikvision ${device.label}: ${result.fetched} fetched, ${result.inserted} new.`,
       );
     } catch (error) {
+      failed += 1;
+      lastError = messageOf(error);
       console.error(
-        `[worker] Hikvision ${device.label} failed (checkpoint not advanced): ${messageOf(error)}`,
+        `[worker] Hikvision ${device.label} failed (checkpoint not advanced): ${lastError}`,
       );
     }
   }
-  await recordWorkerRun("hikvision");
+  // Only report a run-level error when nothing succeeded; a partial failure is
+  // already visible per device in the status table.
+  await recordWorkerRun("hikvision", {
+    error: failed > 0 && succeeded === 0 ? lastError : null,
+  });
 }
 
 async function runCloudJob(settings: AppSettings): Promise<void> {
