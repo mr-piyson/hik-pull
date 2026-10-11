@@ -393,6 +393,31 @@ export async function getEvent(
   return row ? parseEvent(row) : null;
 }
 
+/**
+ * Re-read every stored event in its original shape. Used to re-derive things
+ * like the attendance log after a classification fix, since derived data is
+ * computed on write and is not retroactively updated by a code change.
+ * Malformed rows are skipped rather than aborting the sweep.
+ */
+export async function listStoredEvents(): Promise<AccessEvent[]> {
+  const rows = await prisma.logEvent.findMany({
+    orderBy: { receivedAt: "asc" },
+  });
+  const events: AccessEvent[] = [];
+  for (const row of rows) {
+    try {
+      events.push(parseEvent(row));
+    } catch (error) {
+      console.warn(
+        `[events] Skipping unreadable stored event ${row.deviceId}/${row.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+  return events;
+}
+
 export async function queryEvents(query: EventQuery): Promise<AccessEvent[]> {
   const rows = await prisma.logEvent.findMany({
     where: { deviceId: query.deviceId },

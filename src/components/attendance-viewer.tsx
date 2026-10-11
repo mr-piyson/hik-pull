@@ -84,7 +84,9 @@ export function AttendanceViewer({
   const [hasMore, setHasMore] = useState(initialPage.hasMore);
   const [total, setTotal] = useState(initialPage.total);
   const [loading, setLoading] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [filter, setFilter] = useState<SyncFilter>("ALL");
 
@@ -179,6 +181,29 @@ export function AttendanceViewer({
     }
   };
 
+  const pullAll = async () => {
+    setPulling(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await trpc.attendance.pull.mutate();
+      const failureSuffix =
+        result.failed > 0 ? ` (${result.failed} device(s) failed)` : "";
+      setNotice(
+        `Pulled ${result.fetched} event(s) — ${result.inserted} new — from ${result.devices} device(s)${failureSuffix}.`,
+      );
+      await refresh();
+    } catch (failure) {
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not pull attendance logs.",
+      );
+    } finally {
+      setPulling(false);
+    }
+  };
+
   return (
     <main className="mx-auto flex w-full max-w-[90rem] flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
       <header>
@@ -222,6 +247,14 @@ export function AttendanceViewer({
               <option value="FAILED">Failed</option>
             </select>
           </label>
+          <button
+            type="button"
+            onClick={() => void pullAll()}
+            disabled={pulling}
+            className="rounded-md border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60 dark:border-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600"
+          >
+            {pulling ? "Pulling…" : "Pull from all devices"}
+          </button>
           <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
             Showing {logs.length} of {total}
           </span>
@@ -323,6 +356,11 @@ export function AttendanceViewer({
             </tbody>
           </table>
         </div>
+        {notice ? (
+          <output className="block border-t border-emerald-200 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900 dark:text-emerald-300">
+            {notice}
+          </output>
+        ) : null}
         {error ? (
           <p
             role="alert"

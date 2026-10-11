@@ -1,4 +1,7 @@
-import { backfillCloudOutbox } from "@/lib/hik/attendance-store";
+import {
+  backfillCloudOutbox,
+  reconcileAttendanceFromEvents,
+} from "@/lib/hik/attendance-store";
 import { syncDeviceHistory } from "@/lib/hik/daily-history-sync";
 import { prisma } from "@/lib/hik/db";
 import { startDevice } from "@/lib/hik/registry";
@@ -18,6 +21,7 @@ type WorkerLoopState = {
   liveStarted: boolean;
   hikvisionInitialized: boolean;
   outboxBackfilled: boolean;
+  attendanceReconciled: boolean;
   nextHikvisionAt: number;
   nextCloudAt: number;
 };
@@ -36,6 +40,7 @@ function loopState(): WorkerLoopState {
     liveStarted: false,
     hikvisionInitialized: false,
     outboxBackfilled: false,
+    attendanceReconciled: false,
     nextHikvisionAt: 0,
     nextCloudAt: 0,
   };
@@ -102,6 +107,25 @@ async function tick(): Promise<void> {
     } catch (error) {
       console.error(
         `[worker] Outbox backfill failed (will retry): ${messageOf(error)}`,
+      );
+    }
+  }
+
+  if (!state.attendanceReconciled) {
+    // One-time re-derive of the attendance log from stored events, so a
+    // classification fix reaches events written before it. Latches only on
+    // success, so a transient failure retries instead of being lost.
+    try {
+      const reconciled = await reconcileAttendanceFromEvents();
+      state.attendanceReconciled = true;
+      if (reconciled > 0) {
+        console.info(
+          `[worker] Rebuilt ${reconciled} attendance event(s) from stored events.`,
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[worker] Attendance reconcile failed (will retry): ${messageOf(error)}`,
       );
     }
   }

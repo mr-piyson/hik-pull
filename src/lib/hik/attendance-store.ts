@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { getDeviceInfo } from "./client";
 import { DEFAULT_ORGANIZATION_ID } from "./constants";
 import { prisma } from "./db";
+import { listStoredEvents } from "./event-store";
 import { DENIED_MINORS } from "./events";
 import { getDevice, getDeviceMetadata, saveDeviceMetadata } from "./store";
 import {
@@ -263,6 +264,41 @@ export async function recordAttendanceEvents(
       }
       return created;
     });
+  }
+  return inserted;
+}
+
+/**
+ * Re-derive the attendance log from events already stored in `LogEvent`.
+ * Attendance rows are computed when an event is first written, so a change to
+ * event classification (a code that was wrongly treated as denied) does not
+ * reach events stored before it. Replaying them through the normal writer is
+ * idempotent: rows dedupe on `sourceKey` and denied rows are pruned.
+ */
+export async function reconcileAttendanceFromEvents(): Promise<number> {
+  const events = await listStoredEvents();
+  if (events.length === 0) {
+    return 0;
+  }
+
+  const byDevice = new Map<string, AccessEvent[]>();
+  for (const event of events) {
+    const group = byDevice.get(event.deviceId);
+    if (group) {
+      group.push(event);
+    } else {
+      byDevice.set(event.deviceId, [event]);
+    }
+  }
+
+  let inserted = 0;
+  for (const [deviceId, deviceEvents] of byDevice) {
+    const device = await getDevice(deviceId);
+    if (!device) {
+      // Events cascade-delete with their device, so this is only a race.
+      continue;
+    }
+    inserted += await recordAttendanceEvents(device, deviceEvents);
   }
   return inserted;
 }

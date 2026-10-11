@@ -31,10 +31,10 @@ const MINOR_LABELS: Record<number, string> = {
   10: "card blocked",
   11: "card - wrong reader",
   12: "card authentication failed",
-  21: "fingerprint invalid",
-  22: "fingerprint valid",
-  38: "card invalid",
-  39: "card invalid",
+  21: "lock opened",
+  22: "lock closed",
+  38: "fingerprint valid",
+  39: "fingerprint invalid",
   75: "door opened",
   76: "door closed",
   81: "door held open",
@@ -42,15 +42,26 @@ const MINOR_LABELS: Record<number, string> = {
 };
 
 /**
- * 38 and 39 are listed by a DS-K1T671MF (V3.7.0) under `minorException` for
- * major 5 in `/ISAPI/AccessControl/AcsEvent/capabilities`, which is the
- * device's own statement that they are refusals rather than grants.
+ * Codes whose meanings come from the Hikvision SDK `NET_DVR_ACS_ALARM_INFO`
+ * minor table (major 5 / `MAJOR_EVENT`):
+ *
+ *   0x15 / 21  MINOR_LOCK_OPEN                  lock opened
+ *   0x16 / 22  MINOR_LOCK_CLOSE                 lock closed
+ *   0x26 / 38  MINOR_FINGERPRINT_COMPARE_PASS   fingerprint compare passed
+ *   0x27 / 39  MINOR_FINGERPRINT_COMPARE_FAIL   fingerprint compare failed
+ *   0x4b / 75  MINOR_FACE_VERIFY_PASS           face verify passed
+ *   0x4c / 76  MINOR_FACE_VERIFY_FAIL           face verify failed
+ *
+ * A DS-K1T671MF (V3.7.0) files 38 under `minorException` in
+ * `/ISAPI/AccessControl/AcsEvent/capabilities`, but the SDK and the payloads
+ * themselves (38 carries the person id/name, 39 does not) show 38 is a
+ * successful fingerprint match. It must not be treated as a denial or the
+ * attendance log loses every fingerprint punch.
  */
-export const DENIED_MINORS = new Set([2, 6, 7, 8, 9, 10, 11, 12, 21, 38, 39]);
-const DOOR_MINORS = new Set([75, 76, 81, 82]);
-/** Known-good authentications. Face-comparison codes are firmware-specific
- * and therefore intentionally absent — they land in `other` until surveyed. */
-const GRANTED_MINORS = new Set([1, 22]);
+export const DENIED_MINORS = new Set([2, 6, 7, 8, 9, 10, 11, 12, 39]);
+const DOOR_MINORS = new Set([21, 22, 75, 76, 81, 82]);
+/** Known-good authentications. */
+const GRANTED_MINORS = new Set([1, 38]);
 
 export function labelForMajor(major: number): string {
   return MAJOR_LABELS[major] ?? `major ${major}`;
