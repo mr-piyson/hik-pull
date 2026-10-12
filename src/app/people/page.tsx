@@ -5,5 +5,5 @@ export const dynamic = "force-dynamic";
 
 export default async function PeoplePage() {
   const users = await listManagedUsers();
-  return <UserManagement initialUsers={users} />;
+  return <UserManagement initialUsers={users} mode="directory" />;
 }
