@@ -1,67 +1,76 @@
 "use client";
 
+import {
+  Activity,
+  ArrowDownUp,
+  CalendarClock,
+  LayoutDashboard,
+  Settings2,
+  Users,
+  Webcam,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Button } from "@/components/ui/button";
 
 const LINKS = [
-  { href: "/", label: "Overview", marker: "OV" },
-  { href: "/devices", label: "Devices", marker: "DV" },
-  { href: "/people", label: "People", marker: "US" },
-  { href: "/access-events", label: "Access events", marker: "EV" },
-  { href: "/attendance", label: "Attendance", marker: "AT" },
-  { href: "/sync-history", label: "Sync history", marker: "SY" },
-  { href: "/settings", label: "Settings", marker: "ST" },
+  { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/people", label: "People", icon: Users },
+  { href: "/devices", label: "Devices", icon: Webcam },
+  { href: "/access-events", label: "Access events", icon: Activity },
+  { href: "/attendance", label: "Attendance", icon: CalendarClock },
+  { href: "/sync-history", label: "Sync history", icon: ArrowDownUp },
+  { href: "/settings", label: "Settings", icon: Settings2 },
 ] as const;
 
 export function SiteNavigation() {
   const pathname = usePathname();
 
   return (
-    <header className="border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="mx-auto flex w-full max-w-[90rem] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
+      <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <div className="grid size-10 place-items-center rounded-xl bg-blue-600 text-xs font-bold tracking-wide text-white">
-            HK
+          <div className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground">
+            <Webcam aria-hidden="true" />
           </div>
-          <div>
-            <Link href="/" className="text-base font-semibold tracking-tight">
+          <div className="min-w-0">
+            <Link
+              href="/"
+              className="truncate text-sm font-semibold tracking-tight"
+            >
               Hikvision Access Manager
             </Link>
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-              Users · Devices · Audit
+            <p className="text-xs text-muted-foreground">
+              Access operations workspace
             </p>
           </div>
-          <span className="ml-auto hidden rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 sm:inline-flex dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+          <span className="ml-auto hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+            <span className="size-2 rounded-full bg-primary" />
             Local network
           </span>
         </div>
 
         <nav
           aria-label="Main navigation"
-          className="flex gap-1 overflow-x-auto border-t border-zinc-100 pt-3 dark:border-zinc-800"
+          className="-mx-1 flex gap-1 overflow-x-auto pb-0.5"
         >
-          {LINKS.map((link) => {
+          {LINKS.map(({ href, label, icon: Icon }) => {
             const active =
-              link.href === "/"
+              href === "/"
                 ? pathname === "/"
-                : pathname === link.href ||
-                  pathname.startsWith(`${link.href}/`);
+                : pathname === href || pathname.startsWith(`${href}/`);
             return (
-              <Link
-                key={link.href}
-                href={link.href}
+              <Button
+                key={href}
+                variant={active ? "secondary" : "ghost"}
+                size="sm"
+                render={<Link href={href} />}
                 aria-current={active ? "page" : undefined}
-                className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  active
-                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
-                }`}
+                className="shrink-0"
               >
-                <span className="font-mono text-[10px] opacity-70">
-                  {link.marker}
-                </span>
-                {link.label}
-              </Link>
+                <Icon data-icon="inline-start" aria-hidden="true" />
+                {label}
+              </Button>
             );
           })}
         </nav>

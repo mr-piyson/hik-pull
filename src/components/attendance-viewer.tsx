@@ -1,6 +1,33 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type {
   AttendanceLogEntry,
   CloudSyncStatus,
@@ -47,24 +74,11 @@ function displayDateTime(value: string | null): string {
       });
 }
 
-const SYNC_TONE: Record<string, string> = {
-  SYNCED:
-    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300",
-  PENDING:
-    "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300",
-  FAILED:
-    "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300",
-};
-
 function SyncBadge({ status }: { status: string }) {
   return (
-    <span
-      className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
-        SYNC_TONE[status] ?? SYNC_TONE.PENDING
-      }`}
-    >
+    <Badge variant={status === "FAILED" ? "destructive" : "secondary"}>
       {status}
-    </span>
+    </Badge>
   );
 }
 
@@ -205,25 +219,23 @@ export function AttendanceViewer({
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-[90rem] flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+    <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
-          Attendance
-        </p>
+        <p className="text-sm font-medium text-muted-foreground">Attendance</p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight">
           Person events
         </h1>
-        <p className="mt-2 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
           Non-denied events containing person ID, name, or card data from
           configured terminals. Device time is retained verbatim in the raw time
           column.
         </p>
-        <p className="mt-1 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
           Attendance is collected when a terminal&apos;s live stream is running
           or its event history is pulled from{" "}
           <a
             href="/access-events"
-            className="font-medium text-blue-700 underline underline-offset-2 dark:text-blue-300"
+            className="font-medium text-primary underline underline-offset-2"
           >
             Access events
           </a>
@@ -231,157 +243,154 @@ export function AttendanceViewer({
         </p>
       </header>
 
-      <section className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-        <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
-          <h2 className="font-semibold">Attendance records</h2>
-          <label className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            Cloud status
-            <select
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as SyncFilter)}
-              className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs dark:border-zinc-700 dark:bg-zinc-950"
-            >
-              <option value="ALL">All</option>
-              <option value="PENDING">Pending</option>
-              <option value="SYNCED">Synced</option>
-              <option value="FAILED">Failed</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={() => void pullAll()}
-            disabled={pulling}
-            className="rounded-md border border-blue-600 bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60 dark:border-blue-500 dark:bg-blue-500 dark:hover:bg-blue-600"
-          >
-            {pulling ? "Pulling…" : "Pull from all devices"}
-          </button>
-          <span className="ml-auto text-xs text-zinc-500 dark:text-zinc-400">
-            Showing {logs.length} of {total}
-          </span>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            {lastUpdated
-              ? `Updated ${lastUpdated.toLocaleTimeString()}`
-              : `Auto-refreshes every ${refreshSeconds} seconds`}
-          </span>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[100rem] border-collapse text-left text-sm">
-            <thead className="bg-zinc-100 text-xs uppercase tracking-wide text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
-              <tr>
-                <th scope="col" className="px-4 py-3">
-                  Device IP
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Device model
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Device serial
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Serial no
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Person ID
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Person name
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Card no
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Attendance direction
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Verification
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Cloud
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Date/time
-                </th>
-                <th scope="col" className="px-4 py-3">
-                  Raw time
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {logs.map((log) => (
-                <tr
-                  key={log.id}
-                  className="border-t border-zinc-200 align-top dark:border-zinc-800"
-                >
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
-                    {display(log.deviceIp)}
-                  </td>
-                  <td className="px-4 py-3">{display(log.deviceModel)}</td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {display(log.deviceSerial)}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {display(log.serialNo)}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {display(log.personId)}
-                  </td>
-                  <td className="px-4 py-3">{display(log.personName)}</td>
-                  <td className="px-4 py-3 font-mono text-xs">
-                    {display(log.cardNo)}
-                  </td>
-                  <td className="px-4 py-3 capitalize">{log.gateDirection}</td>
-                  <td className="px-4 py-3">{display(log.verification)}</td>
-                  <td className="px-4 py-3">
-                    <SyncBadge status={log.syncStatus} />
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-xs">
-                    {displayDateTime(log.dateTime)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
-                    {display(log.timeRaw)}
-                  </td>
-                </tr>
-              ))}
-              {logs.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={12}
-                    className="px-4 py-12 text-center text-sm text-zinc-500 dark:text-zinc-400"
-                  >
-                    No successful authentication records have been collected
-                    yet.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        {notice ? (
-          <output className="block border-t border-emerald-200 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900 dark:text-emerald-300">
-            {notice}
-          </output>
-        ) : null}
-        {error ? (
-          <p
-            role="alert"
-            className="border-t border-red-200 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:text-red-300"
-          >
-            {error}
-          </p>
-        ) : null}
-        {hasMore ? (
-          <div className="border-t border-zinc-200 p-4 text-center dark:border-zinc-800">
-            <button
-              type="button"
-              onClick={() => void loadMore()}
-              disabled={loading}
-              className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 disabled:cursor-wait disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-            >
-              {loading ? "Loading..." : "Load more"}
-            </button>
+      <Card className="min-w-0">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+          <div>
+            <CardTitle>Attendance records</CardTitle>
+            <CardDescription>
+              {logs.length} of {total} records ·{" "}
+              {lastUpdated
+                ? `Updated ${lastUpdated.toLocaleTimeString()}`
+                : `Auto-refreshes every ${refreshSeconds} seconds`}
+            </CardDescription>
           </div>
-        ) : null}
-      </section>
+          <div className="flex flex-wrap items-center gap-3">
+            <Field orientation="horizontal" className="items-center gap-2">
+              <FieldLabel htmlFor="attendance-cloud-filter">
+                Cloud status
+              </FieldLabel>
+              <Select
+                value={filter}
+                onValueChange={(value) => {
+                  if (
+                    value === "ALL" ||
+                    value === "PENDING" ||
+                    value === "SYNCED" ||
+                    value === "FAILED"
+                  ) {
+                    setFilter(value);
+                  }
+                }}
+              >
+                <SelectTrigger
+                  id="attendance-cloud-filter"
+                  size="sm"
+                  aria-label="Filter by cloud status"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="ALL">All</SelectItem>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="SYNCED">Synced</SelectItem>
+                    <SelectItem value="FAILED">Failed</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </Field>
+            <Button
+              type="button"
+              onClick={() => void pullAll()}
+              disabled={pulling}
+              size="sm"
+            >
+              {pulling ? "Pulling…" : "Pull from all devices"}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="flex min-w-0 flex-col gap-4">
+          <div className="overflow-x-auto rounded-md border">
+            <Table className="min-w-[100rem]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Device IP</TableHead>
+                  <TableHead>Device model</TableHead>
+                  <TableHead>Device serial</TableHead>
+                  <TableHead>Serial no</TableHead>
+                  <TableHead>Person ID</TableHead>
+                  <TableHead>Person name</TableHead>
+                  <TableHead>Card no</TableHead>
+                  <TableHead>Attendance direction</TableHead>
+                  <TableHead>Verification</TableHead>
+                  <TableHead>Cloud</TableHead>
+                  <TableHead>Date/time</TableHead>
+                  <TableHead>Raw time</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {logs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="font-mono text-xs">
+                      {display(log.deviceIp)}
+                    </TableCell>
+                    <TableCell>{display(log.deviceModel)}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {display(log.deviceSerial)}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {display(log.serialNo)}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {display(log.personId)}
+                    </TableCell>
+                    <TableCell>{display(log.personName)}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {display(log.cardNo)}
+                    </TableCell>
+                    <TableCell className="capitalize">
+                      {log.gateDirection}
+                    </TableCell>
+                    <TableCell>{display(log.verification)}</TableCell>
+                    <TableCell>
+                      <SyncBadge status={log.syncStatus} />
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {displayDateTime(log.dateTime)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap font-mono text-xs">
+                      {display(log.timeRaw)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {logs.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={12}
+                      className="h-24 text-center text-muted-foreground"
+                    >
+                      No successful authentication records have been collected
+                      yet.
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+          {notice ? (
+            <Alert>
+              <AlertDescription>{notice}</AlertDescription>
+            </Alert>
+          ) : null}
+          {error ? (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+          {hasMore ? (
+            <div className="flex justify-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void loadMore()}
+                disabled={loading}
+              >
+                {loading ? "Loading…" : "Load more"}
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
     </main>
   );
 }

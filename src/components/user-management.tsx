@@ -2,6 +2,45 @@
 
 import Image from "next/image";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { PublicDevice } from "@/lib/hik/types";
 import {
   AUTHENTICATION_MODES,
@@ -354,560 +393,591 @@ export function UserManagement({
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-[90rem] flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
+    <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <section className="flex flex-col gap-4 ">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">People</h2>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+            <p className="text-sm font-medium text-muted-foreground">
+              Directory
+            </p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+              People
+            </h1>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
               The database is the source of truth. People are assigned to Door 1
               with plan template 1; authentication inherits each terminal&apos;s
               setting.
             </p>
           </div>
           <div className="flex gap-2 text-xs">
-            <span className="rounded-full bg-zinc-100 px-3 py-1.5 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+            <Badge variant="secondary" className="h-7 px-3">
               {users.length} master records
-            </span>
+            </Badge>
           </div>
         </div>
 
-        <form
-          onSubmit={submit}
-          className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50/80 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900/60">
-            <div>
-              <h3 className="font-semibold">
-                {editingId ? "Edit person" : "Add person"}
-              </h3>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                Person details, credentials, and authentication settings
-              </p>
-            </div>
-            <span className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300">
-              Synced to {devices.length} device{devices.length === 1 ? "" : "s"}
-            </span>
-          </div>
-
-          <div className="flex flex-col gap-5 p-4 sm:p-6">
-            <fieldset className="rounded-xl border border-zinc-200 p-4 sm:p-5 dark:border-zinc-800">
-              <legend className="px-2 text-sm font-semibold">
-                Basic Information
-              </legend>
-              <div className="grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
-                <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">
-                    Employee ID <span className="text-red-600">*</span>
-                  </span>
-                  <input
-                    required
-                    maxLength={32}
-                    value={form.employeeNo}
-                    disabled={Boolean(editingId)}
-                    onChange={(event) =>
-                      updateForm("employeeNo", event.target.value)
-                    }
-                    placeholder="5738"
-                    autoComplete="off"
-                    className="h-10 rounded-md border border-zinc-300 bg-background px-3 font-mono outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-60 dark:border-zinc-700"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">
-                    Name <span className="text-red-600">*</span>
-                  </span>
-                  <input
-                    required
-                    maxLength={64}
-                    value={form.name}
-                    onChange={(event) => updateForm("name", event.target.value)}
-                    placeholder="Full name"
-                    className="h-10 rounded-md border border-zinc-300 bg-background px-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">Floor No.</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={2147483647}
-                    value={form.floorNumber}
-                    onChange={(event) =>
-                      updateForm("floorNumber", event.target.value)
-                    }
-                    className="h-10 rounded-md border border-zinc-300 bg-background px-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">Room No.</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={2147483647}
-                    value={form.roomNumber}
-                    onChange={(event) =>
-                      updateForm("roomNumber", event.target.value)
-                    }
-                    className="h-10 rounded-md border border-zinc-300 bg-background px-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700"
-                  />
-                </label>
-                <fieldset className="flex flex-col gap-2 text-sm">
-                  <legend className="font-medium">Gender</legend>
-                  <div className="flex h-10 flex-wrap items-center gap-4">
-                    {GENDERS.map((gender) => (
-                      <label
-                        key={gender}
-                        className="inline-flex items-center gap-2 capitalize"
-                      >
-                        <input
-                          type="radio"
-                          name="gender"
-                          value={gender}
-                          checked={form.gender === gender}
-                          onChange={() => updateForm("gender", gender)}
-                          className="accent-blue-600"
-                        />
-                        {gender}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                <fieldset className="flex flex-col gap-2 text-sm">
-                  <legend className="font-medium">Person Type</legend>
-                  <div className="flex h-10 flex-wrap items-center gap-4">
-                    {USER_TYPES.map((type) => (
-                      <label
-                        key={type}
-                        className="inline-flex items-center gap-2"
-                      >
-                        <input
-                          type="radio"
-                          name="userType"
-                          value={type}
-                          checked={form.userType === type}
-                          onChange={() => updateForm("userType", type)}
-                          className="accent-blue-600"
-                        />
-                        {type === "normal"
-                          ? "Normal User"
-                          : type === "blackList"
-                            ? "Blocklist User"
-                            : "Visitor"}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-
-                <label className="flex min-h-11 items-center justify-between gap-4 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-900">
-                  <span>
-                    <span className="block font-medium">
-                      Long-Term Effective User
-                    </span>
-                    <span className="text-xs text-zinc-500">
-                      Ignore the validity end date
-                    </span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={form.longTermEffective}
-                    onChange={(event) =>
-                      updateForm("longTermEffective", event.target.checked)
-                    }
-                    className="size-4 accent-blue-600"
-                  />
-                </label>
-                <label className="flex min-h-11 items-center justify-between gap-4 rounded-lg bg-zinc-50 px-3 py-2 text-sm dark:bg-zinc-900">
-                  <span>
-                    <span className="block font-medium">Administrator</span>
-                    <span className="text-xs text-zinc-500">
-                      Allow local device UI privileges
-                    </span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={form.isAdministrator}
-                    onChange={(event) =>
-                      updateForm("isAdministrator", event.target.checked)
-                    }
-                    className="size-4 accent-blue-600"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">Visit Times</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={2147483647}
-                    value={form.visitTimes}
-                    onChange={(event) =>
-                      updateForm("visitTimes", event.target.value)
-                    }
-                    className="h-10 rounded-md border border-zinc-300 bg-background px-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">Start Time (device local)</span>
-                  <input
-                    type="datetime-local"
-                    max="2037-12-31T23:59"
-                    disabled={form.longTermEffective}
-                    value={form.validFrom}
-                    onChange={(event) =>
-                      updateForm("validFrom", event.target.value)
-                    }
-                    className="h-10 rounded-md border border-zinc-300 bg-background px-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 dark:border-zinc-700"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm">
-                  <span className="font-medium">End Time (device local)</span>
-                  <input
-                    type="datetime-local"
-                    max="2037-12-31T23:59"
-                    disabled={form.longTermEffective}
-                    value={form.validUntil}
-                    onChange={(event) =>
-                      updateForm("validUntil", event.target.value)
-                    }
-                    className="h-10 rounded-md border border-zinc-300 bg-background px-3 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 dark:border-zinc-700"
-                  />
-                </label>
+        <form onSubmit={submit} className="overflow-hidden rounded-xl">
+          <Card>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 border-b">
+              <div>
+                <CardTitle>
+                  {editingId ? "Edit person" : "Add person"}
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Person details, credentials, and authentication settings
+                </CardDescription>
               </div>
-            </fieldset>
+              <Badge variant="outline">
+                Synced to {devices.length} device
+                {devices.length === 1 ? "" : "s"}
+              </Badge>
+            </CardHeader>
 
-            <fieldset className="rounded-xl border border-zinc-200 p-4 sm:p-5 dark:border-zinc-800">
-              <legend className="px-2 text-sm font-semibold">
-                Certificate Configuration
-              </legend>
-              <div className="grid gap-5 lg:grid-cols-2">
-                <div className="flex flex-col gap-3 rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900">
-                  <div>
-                    <h4 className="text-sm font-medium">Face</h4>
-                    <p className="text-xs text-zinc-500">
-                      JPEG, PNG, WebP or AVIF. Compressed below 200 KB before
-                      enrollment.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    {currentPhoto ? (
-                      <Image
-                        src={currentPhoto}
-                        alt="User face preview"
-                        width={80}
-                        height={80}
-                        unoptimized
-                        className="size-20 rounded-lg border border-zinc-200 object-cover dark:border-zinc-700"
-                      />
-                    ) : (
-                      <div className="grid size-20 place-items-center rounded-lg border border-dashed border-zinc-300 bg-white text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950">
-                        No photo
-                      </div>
-                    )}
-                    <label className="flex min-w-0 flex-1 flex-col gap-2 text-sm">
-                      <span className="font-medium">Choose face image</span>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/avif"
-                        onChange={(event) =>
-                          setPhotoFile(event.target.files?.[0] ?? null)
+            <CardContent className="flex flex-col gap-5">
+              <FieldSet className="rounded-xl border p-4 sm:p-5">
+                <FieldLegend>Basic Information</FieldLegend>
+                <FieldGroup className="grid gap-x-5 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <Field>
+                    <FieldLabel htmlFor="employee-no">
+                      Employee ID <span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <Input
+                      id="employee-no"
+                      required
+                      maxLength={32}
+                      value={form.employeeNo}
+                      disabled={Boolean(editingId)}
+                      onChange={(event) =>
+                        updateForm("employeeNo", event.target.value)
+                      }
+                      placeholder="5738"
+                      autoComplete="off"
+                      className="font-mono"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="person-name">
+                      Name <span className="text-destructive">*</span>
+                    </FieldLabel>
+                    <Input
+                      id="person-name"
+                      required
+                      maxLength={64}
+                      value={form.name}
+                      onChange={(event) =>
+                        updateForm("name", event.target.value)
+                      }
+                      placeholder="Full name"
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="floor-number">Floor No.</FieldLabel>
+                    <Input
+                      id="floor-number"
+                      type="number"
+                      min={0}
+                      max={2147483647}
+                      value={form.floorNumber}
+                      onChange={(event) =>
+                        updateForm("floorNumber", event.target.value)
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="room-number">Room No.</FieldLabel>
+                    <Input
+                      id="room-number"
+                      type="number"
+                      min={0}
+                      max={2147483647}
+                      value={form.roomNumber}
+                      onChange={(event) =>
+                        updateForm("roomNumber", event.target.value)
+                      }
+                    />
+                  </Field>
+                  <FieldSet>
+                    <FieldLegend variant="label">Gender</FieldLegend>
+                    <ToggleGroup
+                      aria-label="Gender"
+                      value={[form.gender]}
+                      onValueChange={(values) => {
+                        const gender = GENDERS.find(
+                          (option) => option === values[0],
+                        );
+                        if (gender) {
+                          updateForm("gender", gender);
                         }
-                        className="block w-full text-sm text-zinc-600 file:mr-3 file:rounded-md file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-medium file:text-zinc-800 hover:file:bg-zinc-100 dark:text-zinc-400 dark:file:bg-zinc-800 dark:file:text-zinc-200"
-                      />
-                    </label>
-                  </div>
-                </div>
+                      }}
+                      variant="outline"
+                    >
+                      {GENDERS.map((gender) => (
+                        <ToggleGroupItem
+                          key={gender}
+                          value={gender}
+                          className="capitalize"
+                        >
+                          {gender}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </FieldSet>
+                  <FieldSet>
+                    <FieldLegend variant="label">Person Type</FieldLegend>
+                    <ToggleGroup
+                      aria-label="Person type"
+                      value={[form.userType]}
+                      onValueChange={(values) => {
+                        const type = USER_TYPES.find(
+                          (option) => option === values[0],
+                        );
+                        if (type) {
+                          updateForm("userType", type);
+                        }
+                      }}
+                      variant="outline"
+                    >
+                      {USER_TYPES.map((type) => (
+                        <ToggleGroupItem key={type} value={type}>
+                          {type === "normal"
+                            ? "Normal User"
+                            : type === "blackList"
+                              ? "Blocklist User"
+                              : "Visitor"}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </FieldSet>
 
-                <div className="flex flex-col gap-3 rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900">
-                  <div className="flex items-center justify-between gap-3">
+                  <Field
+                    orientation="horizontal"
+                    className="min-h-11 items-center justify-between gap-4 rounded-lg bg-muted px-3 py-2"
+                  >
+                    <FieldContent>
+                      <FieldLabel htmlFor="long-term-effective">
+                        Long-Term Effective User
+                      </FieldLabel>
+                      <FieldDescription>
+                        Ignore the validity end date
+                      </FieldDescription>
+                    </FieldContent>
+                    <Checkbox
+                      id="long-term-effective"
+                      checked={form.longTermEffective}
+                      onCheckedChange={(checked) =>
+                        updateForm("longTermEffective", checked === true)
+                      }
+                    />
+                  </Field>
+                  <Field
+                    orientation="horizontal"
+                    className="min-h-11 items-center justify-between gap-4 rounded-lg bg-muted px-3 py-2"
+                  >
+                    <FieldContent>
+                      <FieldLabel htmlFor="user-administrator">
+                        Administrator
+                      </FieldLabel>
+                      <FieldDescription>
+                        Allow local device UI privileges
+                      </FieldDescription>
+                    </FieldContent>
+                    <Checkbox
+                      id="user-administrator"
+                      checked={form.isAdministrator}
+                      onCheckedChange={(checked) =>
+                        updateForm("isAdministrator", checked === true)
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="visit-times">Visit Times</FieldLabel>
+                    <Input
+                      id="visit-times"
+                      type="number"
+                      min={0}
+                      max={2147483647}
+                      value={form.visitTimes}
+                      onChange={(event) =>
+                        updateForm("visitTimes", event.target.value)
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="valid-from">
+                      Start Time (device local)
+                    </FieldLabel>
+                    <Input
+                      id="valid-from"
+                      type="datetime-local"
+                      max="2037-12-31T23:59"
+                      disabled={form.longTermEffective}
+                      value={form.validFrom}
+                      onChange={(event) =>
+                        updateForm("validFrom", event.target.value)
+                      }
+                    />
+                  </Field>
+                  <Field>
+                    <FieldLabel htmlFor="valid-until">
+                      End Time (device local)
+                    </FieldLabel>
+                    <Input
+                      id="valid-until"
+                      type="datetime-local"
+                      max="2037-12-31T23:59"
+                      disabled={form.longTermEffective}
+                      value={form.validUntil}
+                      onChange={(event) =>
+                        updateForm("validUntil", event.target.value)
+                      }
+                    />
+                  </Field>
+                </FieldGroup>
+              </FieldSet>
+
+              <FieldSet className="rounded-xl border p-4 sm:p-5">
+                <FieldLegend>Certificate Configuration</FieldLegend>
+                <div className="grid gap-5 lg:grid-cols-2">
+                  <div className="flex flex-col gap-3 rounded-lg bg-muted p-4">
                     <div>
-                      <h4 className="text-sm font-medium">Card</h4>
-                      <p className="text-xs text-zinc-500">
-                        Up to 5 cards can be supported.
+                      <h4 className="text-sm font-medium">Face</h4>
+                      <p className="text-xs text-muted-foreground">
+                        JPEG, PNG, WebP or AVIF. Compressed below 200 KB before
+                        enrollment.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      disabled={form.cardNos.length >= 5}
-                      onClick={() => {
-                        updateForm("cardNos", [
-                          ...form.cardNos,
-                          { id: `draft-${nextCardFieldId}`, value: "" },
-                        ]);
-                        setNextCardFieldId((current) => current + 1);
-                      }}
-                      className="rounded-md border border-zinc-300 bg-background px-3 py-2 text-xs font-medium hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                    >
-                      Add Card
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {form.cardNos.map((card, index) => (
-                      <div key={card.id} className="flex gap-2">
-                        <input
-                          maxLength={32}
-                          value={card.value}
-                          onChange={(event) =>
-                            updateForm(
-                              "cardNos",
-                              form.cardNos.map((entry, cardIndex) =>
-                                cardIndex === index
-                                  ? { ...entry, value: event.target.value }
-                                  : entry,
-                              ),
-                            )
-                          }
-                          placeholder={`Card ${index + 1} number`}
-                          autoComplete="off"
-                          aria-label={`Card ${index + 1} number`}
-                          className="h-10 min-w-0 flex-1 rounded-md border border-zinc-300 bg-background px-3 font-mono text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700"
+                    <div className="flex items-center gap-4">
+                      {currentPhoto ? (
+                        <Image
+                          src={currentPhoto}
+                          alt="User face preview"
+                          width={80}
+                          height={80}
+                          unoptimized
+                          className="size-20 rounded-lg border object-cover"
                         />
-                        {form.cardNos.length > 1 ? (
-                          <button
-                            type="button"
-                            onClick={() =>
+                      ) : (
+                        <div className="grid size-20 place-items-center rounded-lg border border-dashed bg-card text-xs text-muted-foreground">
+                          No photo
+                        </div>
+                      )}
+                      <Field className="min-w-0 flex-1">
+                        <FieldLabel htmlFor="face-photo">
+                          Choose face image
+                        </FieldLabel>
+                        <Input
+                          id="face-photo"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/avif"
+                          onChange={(event) =>
+                            setPhotoFile(event.target.files?.[0] ?? null)
+                          }
+                          className="max-w-sm"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 rounded-lg bg-muted p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-medium">Card</h4>
+                        <p className="text-xs text-muted-foreground">
+                          Up to 5 cards can be supported.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        disabled={form.cardNos.length >= 5}
+                        onClick={() => {
+                          updateForm("cardNos", [
+                            ...form.cardNos,
+                            { id: `draft-${nextCardFieldId}`, value: "" },
+                          ]);
+                          setNextCardFieldId((current) => current + 1);
+                        }}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Add Card
+                      </Button>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {form.cardNos.map((card, index) => (
+                        <div key={card.id} className="flex gap-2">
+                          <Input
+                            maxLength={32}
+                            value={card.value}
+                            onChange={(event) =>
                               updateForm(
                                 "cardNos",
-                                form.cardNos.filter(
-                                  (_, cardIndex) => cardIndex !== index,
+                                form.cardNos.map((entry, cardIndex) =>
+                                  cardIndex === index
+                                    ? { ...entry, value: event.target.value }
+                                    : entry,
                                 ),
                               )
                             }
-                            aria-label={`Remove card ${index + 1}`}
-                            className="rounded-md border border-zinc-300 px-3 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                          >
-                            Remove
-                          </button>
-                        ) : null}
-                      </div>
-                    ))}
+                            placeholder={`Card ${index + 1} number`}
+                            autoComplete="off"
+                            aria-label={`Card ${index + 1} number`}
+                            className="min-w-0 flex-1 font-mono"
+                          />
+                          {form.cardNos.length > 1 ? (
+                            <Button
+                              type="button"
+                              onClick={() =>
+                                updateForm(
+                                  "cardNos",
+                                  form.cardNos.filter(
+                                    (_, cardIndex) => cardIndex !== index,
+                                  ),
+                                )
+                              }
+                              aria-label={`Remove card ${index + 1}`}
+                              variant="outline"
+                              size="sm"
+                            >
+                              Remove
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex flex-col gap-3 rounded-lg bg-zinc-50 p-4 lg:col-span-2 dark:bg-zinc-900">
-                  <div>
-                    <h4 className="text-sm font-medium">Fingerprint</h4>
-                    <p className="text-xs text-zinc-500">
-                      Up to 10 fingerprints per device. Capture starts the
-                      selected terminal&apos;s physical sensor.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <label className="flex min-w-52 flex-1 flex-col gap-1.5 text-sm">
-                      <span className="font-medium">Device</span>
-                      <select
-                        value={fingerprintDeviceId}
-                        onChange={(event) =>
-                          setFingerprintDeviceId(event.target.value)
-                        }
-                        className="h-10 rounded-md border border-zinc-300 bg-background px-3 dark:border-zinc-700"
-                      >
-                        <option value="">
-                          {devices.length === 0
-                            ? "No configured devices"
-                            : "Select a device"}
-                        </option>
-                        {devices.map((device) => (
-                          <option key={device.id} value={device.id}>
-                            {device.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex w-36 flex-col gap-1.5 text-sm">
-                      <span className="font-medium">Finger slot</span>
-                      <select
-                        value={fingerprintNo}
-                        onChange={(event) =>
-                          setFingerprintNo(event.target.value)
-                        }
-                        className="h-10 rounded-md border border-zinc-300 bg-background px-3 dark:border-zinc-700"
-                      >
-                        {FINGER_SLOTS.map((slot) => (
-                          <option key={slot} value={slot}>
-                            Finger {slot}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => void captureFingerprint()}
-                      disabled={
-                        fingerprintBusy || !editingId || !fingerprintDeviceId
-                      }
-                      className="h-10 rounded-md border border-zinc-300 bg-background px-4 text-sm font-medium hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                    >
-                      {fingerprintBusy
-                        ? "Waiting for finger..."
-                        : "Add Fingerprint"}
-                    </button>
-                    {editingId ? (
-                      fingerprintMessage ? (
-                        <output className="w-full text-xs text-zinc-600 dark:text-zinc-400">
-                          {fingerprintMessage}
-                        </output>
-                      ) : null
-                    ) : (
-                      <p className="w-full text-sm text-zinc-600 dark:text-zinc-400">
-                        Save the person first to enroll a fingerprint.
+                  <div className="flex flex-col gap-3 rounded-lg bg-muted p-4 lg:col-span-2">
+                    <div>
+                      <h4 className="text-sm font-medium">Fingerprint</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Up to 10 fingerprints per device. Capture starts the
+                        selected terminal&apos;s physical sensor.
                       </p>
-                    )}
+                    </div>
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="flex min-w-52 flex-1 flex-col gap-1.5 text-sm">
+                        <span className="font-medium">Device</span>
+                        <Select
+                          value={fingerprintDeviceId || null}
+                          onValueChange={(value) =>
+                            setFingerprintDeviceId(value ?? "")
+                          }
+                          disabled={devices.length === 0}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue
+                              placeholder={
+                                devices.length === 0
+                                  ? "No configured devices"
+                                  : "Select a device"
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {devices.map((device) => (
+                                <SelectItem key={device.id} value={device.id}>
+                                  {device.label}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex w-36 flex-col gap-1.5 text-sm">
+                        <span className="font-medium">Finger slot</span>
+                        <Select
+                          value={fingerprintNo}
+                          onValueChange={(value) => {
+                            if (value) {
+                              setFingerprintNo(value);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              {FINGER_SLOTS.map((slot) => (
+                                <SelectItem key={slot} value={String(slot)}>
+                                  Finger {slot}
+                                </SelectItem>
+                              ))}
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={() => void captureFingerprint()}
+                        disabled={
+                          fingerprintBusy || !editingId || !fingerprintDeviceId
+                        }
+                        variant="outline"
+                      >
+                        {fingerprintBusy
+                          ? "Waiting for finger..."
+                          : "Add Fingerprint"}
+                      </Button>
+                      {editingId ? (
+                        fingerprintMessage ? (
+                          <output className="w-full text-xs text-muted-foreground">
+                            {fingerprintMessage}
+                          </output>
+                        ) : null
+                      ) : (
+                        <p className="w-full text-sm text-muted-foreground">
+                          Save the person first to enroll a fingerprint.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </fieldset>
+              </FieldSet>
 
-            <fieldset className="rounded-xl border border-zinc-200 p-4 sm:p-5 dark:border-zinc-800">
-              <legend className="px-2 text-sm font-semibold">
-                Authentication Settings
-              </legend>
-              <div className="flex flex-col gap-4">
-                <fieldset className="flex flex-col gap-2 text-sm">
-                  <legend className="font-medium">Authentication Type</legend>
-                  <div className="flex flex-wrap gap-3">
-                    {(
-                      [
-                        ["sameDevice", "Same as Device"],
-                        ["custom", "Custom"],
-                      ] as const
-                    ).map(([value, label]) => (
-                      <label
-                        key={value}
-                        className={`inline-flex cursor-pointer items-center gap-2 rounded-lg border px-4 py-2.5 ${
-                          form.authenticationType === value
-                            ? "border-blue-500 bg-blue-50 dark:bg-blue-950"
-                            : "border-zinc-200 dark:border-zinc-800"
-                        }`}
+              <FieldSet className="rounded-xl border p-4 sm:p-5">
+                <FieldLegend>Authentication Settings</FieldLegend>
+                <div className="flex flex-col gap-4">
+                  <FieldSet>
+                    <FieldLegend variant="label">
+                      Authentication Type
+                    </FieldLegend>
+                    <ToggleGroup
+                      aria-label="Authentication type"
+                      value={[form.authenticationType]}
+                      onValueChange={(values) => {
+                        const value = values[0];
+                        if (value === "sameDevice" || value === "custom") {
+                          updateForm("authenticationType", value);
+                        }
+                      }}
+                      variant="outline"
+                    >
+                      <ToggleGroupItem value="sameDevice">
+                        Same as Device
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="custom">Custom</ToggleGroupItem>
+                    </ToggleGroup>
+                  </FieldSet>
+                  <Field className="max-w-xl">
+                    <FieldLabel htmlFor="authentication-mode">
+                      Authentication
+                    </FieldLabel>
+                    <Select
+                      value={form.authenticationMode}
+                      disabled={form.authenticationType !== "custom"}
+                      onValueChange={(value) => {
+                        if (
+                          value &&
+                          AUTHENTICATION_MODES.includes(
+                            value as AuthenticationMode,
+                          )
+                        ) {
+                          updateForm(
+                            "authenticationMode",
+                            value as AuthenticationMode,
+                          );
+                        }
+                      }}
+                    >
+                      <SelectTrigger
+                        id="authentication-mode"
+                        className="w-full"
                       >
-                        <input
-                          type="radio"
-                          name="authenticationType"
-                          checked={form.authenticationType === value}
-                          onChange={() =>
-                            updateForm("authenticationType", value)
-                          }
-                          className="accent-blue-600"
-                        />
-                        {label}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                <label className="flex max-w-xl flex-col gap-1.5 text-sm">
-                  <span className="font-medium">Authentication</span>
-                  <select
-                    value={form.authenticationMode}
-                    disabled={form.authenticationType !== "custom"}
-                    onChange={(event) =>
-                      updateForm(
-                        "authenticationMode",
-                        event.target.value as AuthenticationMode,
-                      )
-                    }
-                    className="h-10 rounded-md border border-zinc-300 bg-background px-3 disabled:opacity-50 dark:border-zinc-700"
-                  >
-                    {AUTHENTICATION_MODES.map((mode) => (
-                      <option key={mode} value={mode}>
-                        {authenticationLabel(mode)}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="text-xs text-zinc-500">
-                    Same as Device leaves the terminal&apos;s user verification
-                    mode unchanged. Custom sends the selected mode to each
-                    terminal.
-                  </span>
-                </label>
-              </div>
-            </fieldset>
-          </div>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {AUTHENTICATION_MODES.map((mode) => (
+                            <SelectItem key={mode} value={mode}>
+                              {authenticationLabel(mode)}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      Same as Device leaves the terminal&apos;s user
+                      verification mode unchanged. Custom sends the selected
+                      mode to each terminal.
+                    </FieldDescription>
+                  </Field>
+                </div>
+              </FieldSet>
+            </CardContent>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-zinc-200 bg-zinc-50/80 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900/60">
-            {editingId ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setForm(EMPTY_FORM);
-                  setPhotoFile(null);
-                  setFingerprintMessage(null);
-                  setError(null);
-                  setFeedback(null);
-                }}
-                className="rounded-md border border-zinc-300 bg-background px-4 py-2.5 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-              >
-                Cancel
-              </button>
-            ) : null}
-            <button
-              type="submit"
-              disabled={busy}
-              className="rounded-md bg-blue-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-wait disabled:opacity-60"
-            >
-              {busy
-                ? "Saving and syncing..."
-                : editingId
-                  ? "Save changes"
-                  : "Add person"}
-            </button>
-          </div>
+            <CardFooter className="flex flex-wrap justify-end gap-2">
+              {editingId ? (
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setEditingId(null);
+                    setForm(EMPTY_FORM);
+                    setPhotoFile(null);
+                    setFingerprintMessage(null);
+                    setError(null);
+                    setFeedback(null);
+                  }}
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+              ) : null}
+              <Button type="submit" disabled={busy}>
+                {busy
+                  ? "Saving and syncing..."
+                  : editingId
+                    ? "Save changes"
+                    : "Add person"}
+              </Button>
+            </CardFooter>
+          </Card>
         </form>
 
         {error || feedback ? (
-          <p
+          <Alert
+            variant={error ? "destructive" : "default"}
             role={error ? "alert" : "status"}
-            className={`rounded-lg border px-3 py-2 text-sm ${
-              error
-                ? "border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-                : "border-blue-200 bg-blue-50 text-blue-900 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-100"
-            }`}
           >
-            {error ?? feedback}
-          </p>
+            <AlertDescription>{error ?? feedback}</AlertDescription>
+          </Alert>
         ) : null}
 
-        <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-50 px-4 py-3 dark:bg-zinc-900">
-            <h3 className="text-sm font-semibold">Master directory</h3>
+        <Card className="min-w-0">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+            <div>
+              <CardTitle>Master directory</CardTitle>
+              <CardDescription>
+                Search and manage people and credentials.
+              </CardDescription>
+            </div>
             <label className="sr-only" htmlFor="user-search">
               Search users
             </label>
-            <input
+            <Input
               id="user-search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search name, employee or card"
-              className="w-full max-w-xs rounded-md border border-zinc-300 bg-background px-3 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-zinc-700"
+              className="w-full max-w-xs"
             />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[58rem] border-collapse text-left text-sm">
-              <thead className="bg-zinc-100 text-xs uppercase tracking-wide text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
-                <tr>
-                  <th scope="col" className="px-4 py-2.5">
-                    Person
-                  </th>
-                  <th scope="col" className="px-4 py-2.5">
-                    Employee no.
-                  </th>
-                  <th scope="col" className="px-4 py-2.5">
-                    Card
-                  </th>
-                  <th scope="col" className="px-4 py-2.5">
-                    Type / validity
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+          </CardHeader>
+          <CardContent>
+            <Table className="min-w-[58rem]">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Person</TableHead>
+                  <TableHead>Employee no.</TableHead>
+                  <TableHead>Card</TableHead>
+                  <TableHead>Type / validity</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {visibleUsers.map((user) => (
-                  <tr
-                    key={user.id}
-                    className="border-t border-zinc-200 dark:border-zinc-800"
-                  >
-                    <td className="px-4 py-3">
+                  <TableRow key={user.id}>
+                    <TableCell>
                       <div className="flex items-center gap-2.5">
                         {user.photoUrl ? (
                           <Image
@@ -919,41 +989,42 @@ export function UserManagement({
                             className="size-9 rounded-lg object-cover"
                           />
                         ) : (
-                          <span className="grid size-9 place-items-center rounded-lg bg-zinc-100 font-mono text-[9px] text-zinc-500 dark:bg-zinc-800">
+                          <span className="grid size-9 place-items-center rounded-lg bg-muted font-mono text-[9px] text-muted-foreground">
                             —
                           </span>
                         )}
                         <span className="font-medium">{user.name}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs">
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
                       {user.employeeNo}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs">
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
                       {user.cardNos.length > 0 ? user.cardNos.join(", ") : "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       <span className="block">
                         {readableType(user.userType)}
                       </span>
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                      <span className="text-xs text-muted-foreground">
                         {user.validFrom
                           ? `From ${formatDate(user.validFrom)} · `
                           : ""}
                         Until {formatDate(user.validUntil)}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
+                    </TableCell>
+                    <TableCell>
                       <div className="flex justify-end gap-2">
-                        <button
+                        <Button
                           type="button"
                           disabled={busyUserId === user.id || busy}
                           onClick={() => void retry(user)}
-                          className="rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                          variant="outline"
+                          size="sm"
                         >
-                          {busyUserId === user.id ? "Syncing..." : "Sync"}
-                        </button>
-                        <button
+                          {busyUserId === user.id ? "Syncing…" : "Sync"}
+                        </Button>
+                        <Button
                           type="button"
                           disabled={busyUserId === user.id || busy}
                           onClick={() => {
@@ -963,38 +1034,40 @@ export function UserManagement({
                             setError(null);
                             setFeedback(null);
                           }}
-                          className="rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                          variant="outline"
+                          size="sm"
                         >
                           Edit
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           type="button"
                           disabled={busyUserId === user.id || busy}
                           onClick={() => void remove(user)}
-                          className="rounded-md border border-red-300 px-2.5 py-1.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
+                          variant="destructive"
+                          size="sm"
                         >
                           Delete
-                        </button>
+                        </Button>
                       </div>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
                 {visibleUsers.length === 0 ? (
-                  <tr>
-                    <td
+                  <TableRow>
+                    <TableCell
                       colSpan={5}
-                      className="px-4 py-10 text-center text-sm text-zinc-500 dark:text-zinc-400"
+                      className="h-24 text-center text-muted-foreground"
                     >
                       {users.length === 0
                         ? "No people yet. Add a master record above."
                         : "No users match this search."}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       </section>
     </main>
   );

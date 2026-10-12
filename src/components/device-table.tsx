@@ -1,6 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   type GateDirection,
   isGateDirection,
@@ -75,139 +100,131 @@ export function DeviceTable({
 
   if (devices.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-zinc-300 p-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-        No devices yet. Add one above to start pulling access events.
-      </p>
+      <Empty className="min-h-48 border">
+        <EmptyHeader>
+          <EmptyTitle>No devices configured</EmptyTitle>
+          <EmptyDescription>
+            Add a terminal above to start collecting access events.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-      <table className="w-full min-w-[48rem] border-collapse text-left text-sm">
-        <thead className="bg-zinc-100 text-xs uppercase tracking-wide text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
-          <tr>
-            <th scope="col" className="px-3 py-2">
-              Device
-            </th>
-            <th scope="col" className="px-3 py-2">
-              Host
-            </th>
-            <th scope="col" className="px-3 py-2">
-              Username
-            </th>
-            <th scope="col" className="px-3 py-2">
-              Model / firmware
-            </th>
-            <th scope="col" className="px-3 py-2">
-              Attendance direction
-            </th>
-            <th scope="col" className="px-3 py-2 text-right">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+    <div className="flex flex-col gap-3">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Device</TableHead>
+            <TableHead>Host</TableHead>
+            <TableHead>Username</TableHead>
+            <TableHead>Model / firmware</TableHead>
+            <TableHead>Attendance direction</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {devices.map((device) => {
             const info = infoById[device.id];
             const isActive = device.id === activeId;
             return (
-              <tr
+              <TableRow
                 key={device.id}
-                className={`border-t border-zinc-200 dark:border-zinc-800 ${
-                  isActive ? "bg-blue-50 dark:bg-blue-950/40" : ""
-                }`}
+                data-state={isActive ? "selected" : undefined}
               >
-                <td className="px-3 py-2">
-                  <span className="font-medium">{device.label}</span>
-                  {isActive ? (
-                    <span className="ml-2 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-                      streaming
-                    </span>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    {device.label}
+                    {isActive ? <Badge>Streaming</Badge> : null}
+                  </div>
+                </TableCell>
+                <TableCell className="font-mono text-xs">
                   {device.scheme}://{device.host}:{device.port}
-                </td>
-                <td className="px-3 py-2 font-mono text-xs">
+                </TableCell>
+                <TableCell className="font-mono text-xs">
                   {device.username}
-                </td>
-                <td className="px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400">
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
                   {info ? (
                     <>
                       <span className="block">
-                        {info.model || "unknown model"}
+                        {info.model || "Unknown model"}
                       </span>
                       <span className="block font-mono">
                         {info.firmwareVersion}
                       </span>
                     </>
                   ) : (
-                    "-"
+                    "—"
                   )}
-                </td>
-                <td className="px-3 py-2">
-                  <select
+                </TableCell>
+                <TableCell>
+                  <Select
                     value={device.gateDirection}
-                    disabled={busyId === device.id}
-                    onChange={(event) => {
-                      const direction = event.target.value;
-                      if (isGateDirection(direction)) {
-                        void updateDirection(device, direction);
+                    onValueChange={(value) => {
+                      if (value && isGateDirection(value)) {
+                        void updateDirection(device, value);
                       }
                     }}
-                    aria-label={`Attendance direction for ${device.label}`}
-                    className="rounded border border-zinc-300 bg-white px-2 py-1 text-xs outline-none focus:border-blue-500 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950"
+                    disabled={busyId === device.id}
                   >
-                    <option value="in">In</option>
-                    <option value="out">Out</option>
-                    <option value="none">None</option>
-                  </select>
-                </td>
-                <td className="px-3 py-2 text-right">
+                    <SelectTrigger
+                      aria-label={`Attendance direction for ${device.label}`}
+                      size="sm"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="in">In</SelectItem>
+                        <SelectItem value="out">Out</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </TableCell>
+                <TableCell>
                   <div className="flex justify-end gap-2">
                     {isActive ? (
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="sm"
                         onClick={onStop}
-                        className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
                       >
                         Stop
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
                         type="button"
-                        onClick={() => {
-                          onSelect(device);
-                        }}
-                        className="rounded bg-blue-600 px-2 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onSelect(device)}
                       >
                         Events
-                      </button>
+                      </Button>
                     )}
-                    <button
+                    <Button
                       type="button"
+                      variant="destructive"
+                      size="sm"
                       disabled={busyId === device.id}
-                      onClick={() => {
-                        void remove(device);
-                      }}
-                      className="rounded border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+                      onClick={() => void remove(device)}
                     >
                       Remove
-                    </button>
+                    </Button>
                   </div>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             );
           })}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
       {error ? (
-        <p
-          role="alert"
-          className="px-3 py-2 text-sm text-red-700 dark:text-red-400"
-        >
-          {error}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
     </div>
   );
