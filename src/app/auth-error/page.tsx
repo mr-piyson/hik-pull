@@ -23,7 +23,9 @@ export default function AuthErrorPage() {
           </Alert>
         </CardContent>
         <CardFooter>
-          <Button render={<Link href="/sign-in" />}>Back to sign in</Button>
+          <Link href="/sign-in">
+            <Button>Back to sign in</Button>
+          </Link>
         </CardFooter>
       </Card>
     </main>
