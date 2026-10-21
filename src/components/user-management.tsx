@@ -435,12 +435,14 @@ export function UserManagement({
                 <Badge variant="secondary" className="h-7 px-3">
                   {users.length} master records
                 </Badge>
-                <Button render={<Link href="/people/new" />}>Add person</Button>
+                <Link href="/people/new">
+                  <Button>Add person</Button>
+                </Link>
               </>
             ) : (
-              <Button variant="outline" render={<Link href="/people" />}>
-                Back to people
-              </Button>
+              <Link href="/people">
+                <Button variant="outline">Back to people</Button>
+              </Link>
             )}
           </div>
         </div>
@@ -944,9 +946,9 @@ export function UserManagement({
               </CardContent>
 
               <CardFooter className="flex flex-wrap justify-end gap-2">
-                <Button variant="outline" render={<Link href="/people" />}>
-                  Cancel
-                </Button>
+                <Link href="/people">
+                  <Button variant="outline">Cancel</Button>
+                </Link>
                 <Button type="submit" disabled={busy}>
                   {busy
                     ? "Saving and syncing..."
@@ -1051,14 +1053,16 @@ export function UserManagement({
                           >
                             {busyUserId === user.id ? "Syncing…" : "Sync"}
                           </Button>
-                          <Button
-                            disabled={busyUserId === user.id || busy}
-                            render={<Link href={`/people/${user.id}/edit`} />}
-                            variant="outline"
-                            size="sm"
-                          >
-                            Edit
-                          </Button>
+
+                          <Link href={`/people/${user.id}/edit`}>
+                            <Button
+                              disabled={busyUserId === user.id || busy}
+                              variant="outline"
+                              size="sm"
+                            >
+                              Edit
+                            </Button>
+                          </Link>
                           <Button
                             type="button"
                             disabled={busyUserId === user.id || busy}

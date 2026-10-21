@@ -77,14 +77,12 @@ export function Dashboard({
             terminals, and keep a clear record of device activity.
           </p>
         </div>
-        <Button
-          variant="secondary"
-          render={<Link href="/people" />}
-          className="w-fit"
-        >
-          Manage people
-          <ArrowRight data-icon="inline-end" aria-hidden="true" />
-        </Button>
+        <Link href="/people">
+          <Button variant="secondary" className="w-fit">
+            Manage people
+            <ArrowRight data-icon="inline-end" aria-hidden="true" />
+          </Button>
+        </Link>
       </section>
 
       <section
@@ -148,14 +146,12 @@ export function Dashboard({
                 Latest user updates across configured terminals.
               </CardDescription>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              render={<Link href="/sync-history" />}
-            >
-              View all
-              <ArrowRight data-icon="inline-end" aria-hidden="true" />
-            </Button>
+            <Link href="/sync-history">
+              <Button variant="ghost" size="sm">
+                View all
+                <ArrowRight data-icon="inline-end" aria-hidden="true" />
+              </Button>
+            </Link>
           </CardHeader>
           <CardContent>
             {recentSyncs.length > 0 ? (

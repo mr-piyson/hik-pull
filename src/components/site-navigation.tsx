@@ -60,17 +60,17 @@ export function SiteNavigation() {
                 ? pathname === "/"
                 : pathname === href || pathname.startsWith(`${href}/`);
             return (
-              <Button
-                key={href}
-                variant={active ? "secondary" : "ghost"}
-                size="sm"
-                render={<Link href={href} />}
-                aria-current={active ? "page" : undefined}
-                className="shrink-0"
-              >
-                <Icon data-icon="inline-start" aria-hidden="true" />
-                {label}
-              </Button>
+              <Link key={href} href={href}>
+                <Button
+                  variant={active ? "secondary" : "ghost"}
+                  size="sm"
+                  aria-current={active ? "page" : undefined}
+                  className="shrink-0"
+                >
+                  <Icon data-icon="inline-start" aria-hidden="true" />
+                  {label}
+                </Button>
+              </Link>
             );
           })}
         </nav>
