@@ -25,6 +25,8 @@ export type DeviceRecord = DeviceCredentials & {
   label: string;
   gateDirection: GateDirection;
   createdAt: string;
+  deviceModel?: string | null;
+  deviceSerial?: string | null;
 };
 
 /** Device as safe to send to the browser: no password, ever. */

@@ -25,6 +25,8 @@ type DeviceRow = {
   password: string;
   gateDirection: string;
   createdAt: string;
+  deviceModel?: string | null;
+  deviceSerial?: string | null;
 };
 
 function toRecord(row: DeviceRow): DeviceRecord {
@@ -38,6 +40,8 @@ function toRecord(row: DeviceRow): DeviceRecord {
     password: row.password,
     gateDirection: parseGateDirection(row.gateDirection),
     createdAt: row.createdAt,
+    deviceModel: row.deviceModel ?? null,
+    deviceSerial: row.deviceSerial ?? null,
   };
 }
 

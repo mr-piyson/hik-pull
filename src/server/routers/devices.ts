@@ -147,6 +147,10 @@ export const devicesRouter = router({
       z.object({
         id: z.string().min(1),
         label: z.string().optional(),
+        scheme: z.enum(["http", "https"]).optional(),
+        host: z.string().optional(),
+        port: z.number().optional(),
+        username: z.string().optional(),
         password: z.string().optional(),
         gateDirection: z.enum(["in", "out", "none"]).optional(),
       }),
@@ -162,19 +166,42 @@ export const devicesRouter = router({
 
       const autoStartLiveStreams = (await getAppSettings())
         .autoStartLiveStreams;
-      const next = {
+
+      const next: DeviceRecord = {
         ...device,
-        label: input.label === undefined ? device.label : input.label.trim(),
+        label:
+          input.label === undefined ? device.label : input.label.trim(),
         gateDirection: input.gateDirection ?? device.gateDirection,
+        scheme:
+          input.scheme === undefined
+            ? device.scheme
+            : assertScheme(input.scheme),
+        host: input.host === undefined ? device.host : assertHost(input.host),
+        port:
+          input.port === undefined
+            ? device.port
+            : (() => {
+                assertPort(input.port);
+                return input.port;
+              })(),
+        username:
+          input.username === undefined
+            ? device.username
+            : assertUsername(input.username),
         password:
           input.password && input.password.length > 0
-            ? input.password
+            ? assertPassword(input.password)
             : device.password,
       };
 
-      const changedCredentials = next.password !== device.password;
+      const changedConnection =
+        next.scheme !== device.scheme ||
+        next.host !== device.host ||
+        next.port !== device.port ||
+        next.username !== device.username ||
+        next.password !== device.password;
       let metadata: { model: string; serial: string } | null = null;
-      if (changedCredentials) {
+      if (changedConnection) {
         try {
           const info = await probeDevice(next);
           metadata = { model: info.model, serial: info.serialNumber };
@@ -187,7 +214,7 @@ export const devicesRouter = router({
       }
 
       const saved = await saveDevice(next, metadata ?? undefined);
-      if (changedCredentials) {
+      if (changedConnection) {
         stopDevice(saved.id);
       }
       if (autoStartLiveStreams) {

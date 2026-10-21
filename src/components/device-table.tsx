@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +33,13 @@ import {
   type PublicDevice,
 } from "@/lib/hik/types";
 import { trpc } from "@/trpc/client";
+import type { DeviceMeta } from "./device-management";
 
 export function DeviceTable({
   devices,
   activeId,
   infoById,
+  metaById = {},
   onSelect,
   onStop,
   onRemoved,
@@ -48,6 +51,7 @@ export function DeviceTable({
     string,
     { model: string; firmwareVersion: string; deviceName: string }
   >;
+  metaById?: Record<string, DeviceMeta>;
   onSelect: (device: PublicDevice) => void;
   onStop: () => void;
   onRemoved: (id: string) => void;
@@ -128,6 +132,9 @@ export function DeviceTable({
           {devices.map((device) => {
             const info = infoById[device.id];
             const isActive = device.id === activeId;
+            const meta = metaById[device.id];
+            const model = info?.model || meta?.model || "—";
+            const firmwareVersion = info?.firmwareVersion || "—";
             return (
               <TableRow
                 key={device.id}
@@ -146,13 +153,13 @@ export function DeviceTable({
                   {device.username}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {info ? (
+                  {(info || meta?.model) ? (
                     <>
                       <span className="block">
-                        {info.model || "Unknown model"}
+                        {model || "Unknown model"}
                       </span>
                       <span className="block font-mono">
-                        {info.firmwareVersion}
+                        {firmwareVersion}
                       </span>
                     </>
                   ) : (
@@ -186,6 +193,11 @@ export function DeviceTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
+                    <Link href={`/devices/${device.id}/edit`}>
+                      <Button type="button" variant="outline" size="sm">
+                        Edit
+                      </Button>
+                    </Link>
                     {isActive ? (
                       <Button
                         type="button"
