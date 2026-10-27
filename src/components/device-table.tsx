@@ -121,6 +121,7 @@ export function DeviceTable({
         <TableHeader>
           <TableRow>
             <TableHead>Device</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead>Host</TableHead>
             <TableHead>Username</TableHead>
             <TableHead>Model / firmware</TableHead>
@@ -145,6 +146,17 @@ export function DeviceTable({
                     {device.label}
                     {isActive ? <Badge>Streaming</Badge> : null}
                   </div>
+                </TableCell>
+                <TableCell>
+                  {(() => {
+                    const status = device.status ?? meta?.status ?? "unknown";
+                    const online = status === "online";
+                    return (
+                      <Badge variant={online ? "default" : "outline"}>
+                        {online ? "Online" : "Offline"}
+                      </Badge>
+                    );
+                  })()}
                 </TableCell>
                 <TableCell className="font-mono text-xs">
                   {device.scheme}://{device.host}:{device.port}

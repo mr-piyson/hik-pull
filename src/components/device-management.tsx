@@ -17,6 +17,7 @@ import { DeviceTable } from "./device-table";
 export type DeviceMeta = {
   model?: string | null;
   serial?: string | null;
+  status?: string | null;
 };
 
 export function DeviceManagement({

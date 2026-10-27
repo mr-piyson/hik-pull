@@ -27,6 +27,8 @@ export type DeviceRecord = DeviceCredentials & {
   createdAt: string;
   deviceModel?: string | null;
   deviceSerial?: string | null;
+  /** Operational state: "online" | "offline" | "error" | "unknown". */
+  status?: string;
 };
 
 /** Device as safe to send to the browser: no password, ever. */
@@ -40,6 +42,8 @@ export type PublicDevice = {
   hasPassword: boolean;
   gateDirection: GateDirection;
   createdAt: string;
+  /** Operational state: "online" | "offline" | "error" | "unknown". */
+  status?: string;
 };
 
 export type ConnectionStatus =
@@ -108,5 +112,6 @@ export function toPublicDevice(device: DeviceRecord): PublicDevice {
     hasPassword: device.password.length > 0,
     gateDirection: device.gateDirection,
     createdAt: device.createdAt,
+    status: device.status ?? "unknown",
   };
 }

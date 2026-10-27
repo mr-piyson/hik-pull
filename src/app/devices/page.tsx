@@ -13,6 +13,7 @@ export default async function DevicesPage() {
       {
         model: device.deviceModel ?? null,
         serial: device.deviceSerial ?? null,
+        status: device.status ?? "unknown",
       },
     ]),
   );

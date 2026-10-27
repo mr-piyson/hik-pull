@@ -27,6 +27,7 @@ type DeviceRow = {
   createdAt: string;
   deviceModel?: string | null;
   deviceSerial?: string | null;
+  status?: string | null;
 };
 
 function toRecord(row: DeviceRow): DeviceRecord {
@@ -42,6 +43,7 @@ function toRecord(row: DeviceRow): DeviceRecord {
     createdAt: row.createdAt,
     deviceModel: row.deviceModel ?? null,
     deviceSerial: row.deviceSerial ?? null,
+    status: row.status ?? "unknown",
   };
 }
 
