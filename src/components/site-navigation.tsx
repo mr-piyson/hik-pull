@@ -5,15 +5,16 @@ import {
   ArrowDownUp,
   CalendarClock,
   LayoutDashboard,
+  LogOut,
   Settings2,
   UserCog,
   Users,
   Webcam,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/lib/auth-client";
+import { signOut, useSession } from "@/lib/auth-client";
 
 const BASE_LINKS = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
@@ -26,8 +27,15 @@ const BASE_LINKS = [
 ] as const;
 
 export function SiteNavigation() {
+  const router = useRouter();
   const pathname = usePathname();
   const { data: session, isPending } = useSession();
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/sign-in");
+    router.refresh();
+  };
 
   if (isPending) return null;
   if (!session) return null;
@@ -65,10 +73,20 @@ export function SiteNavigation() {
               Access operations workspace
             </p>
           </div>
-          <span className="ml-auto hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-            <span className="size-2 rounded-full bg-primary" />
-            Local network
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden text-xs text-muted-foreground sm:inline">
+              {session.user.name || session.user.email}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleSignOut()}
+              className="shrink-0"
+            >
+              <LogOut data-icon="inline-start" aria-hidden="true" />
+              Sign out
+            </Button>
+          </div>
         </div>
 
         <nav
