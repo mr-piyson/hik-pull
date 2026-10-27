@@ -169,8 +169,7 @@ export const devicesRouter = router({
 
       const next: DeviceRecord = {
         ...device,
-        label:
-          input.label === undefined ? device.label : input.label.trim(),
+        label: input.label === undefined ? device.label : input.label.trim(),
         gateDirection: input.gateDirection ?? device.gateDirection,
         scheme:
           input.scheme === undefined

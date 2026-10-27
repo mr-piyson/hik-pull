@@ -17,5 +17,7 @@ export default async function DevicesPage() {
       },
     ]),
   );
-  return <DeviceManagement initialDevices={initialDevices} metaById={metaById} />;
+  return (
+    <DeviceManagement initialDevices={initialDevices} metaById={metaById} />
+  );
 }

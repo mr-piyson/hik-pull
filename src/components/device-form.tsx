@@ -1,10 +1,10 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { type FormEvent, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
@@ -23,9 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type GateDirection, isGateDirection, type PublicDevice } from "@/lib/hik/types";
+import {
+  type GateDirection,
+  isGateDirection,
+  type PublicDevice,
+} from "@/lib/hik/types";
 import { trpc } from "@/trpc/client";
-import Link from "next/link";
 
 type FormState = {
   label: string;
@@ -106,7 +110,9 @@ export function DeviceForm({
       });
       router.push("/devices");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reach the app server.");
+      setError(
+        err instanceof Error ? err.message : "Could not reach the app server.",
+      );
     } finally {
       setBusy(false);
     }
@@ -122,9 +128,15 @@ export function DeviceForm({
     <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">Infrastructure</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">{title}</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
+          <p className="text-sm font-medium text-muted-foreground">
+            Infrastructure
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+            {title}
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            {description}
+          </p>
         </div>
         <Link href="/devices">
           <Button variant="outline">Back to devices</Button>
@@ -136,14 +148,17 @@ export function DeviceForm({
           <CardHeader>
             <CardTitle>{title}</CardTitle>
             <CardDescription>
-              Credentials stay on the server and are never shown back in the browser.
+              Credentials stay on the server and are never shown back in the
+              browser.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-5">
               <FieldGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
                 <Field className="lg:col-span-2">
-                  <FieldLabel htmlFor="device-host">IP address / hostname</FieldLabel>
+                  <FieldLabel htmlFor="device-host">
+                    IP address / hostname
+                  </FieldLabel>
                   <Input
                     id="device-host"
                     required
@@ -165,7 +180,9 @@ export function DeviceForm({
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="device-direction">Attendance direction</FieldLabel>
+                  <FieldLabel htmlFor="device-direction">
+                    Attendance direction
+                  </FieldLabel>
                   <Select
                     value={form.gateDirection}
                     onValueChange={(value) => {
@@ -200,7 +217,9 @@ export function DeviceForm({
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="device-password">
-                    {mode === "edit" ? "Password (leave blank to keep)" : "Password"}
+                    {mode === "edit"
+                      ? "Password (leave blank to keep)"
+                      : "Password"}
                   </FieldLabel>
                   <Input
                     id="device-password"
@@ -242,13 +261,20 @@ export function DeviceForm({
                         </SelectGroup>
                       </SelectContent>
                     </Select>
-                    <Field orientation="horizontal" className="ml-2 items-center">
+                    <Field
+                      orientation="horizontal"
+                      className="ml-2 items-center"
+                    >
                       <Checkbox
                         id="show-device-password"
                         checked={showPassword}
-                        onCheckedChange={(checked) => setShowPassword(checked === true)}
+                        onCheckedChange={(checked) =>
+                          setShowPassword(checked === true)
+                        }
                       />
-                      <FieldLabel htmlFor="show-device-password">Show password</FieldLabel>
+                      <FieldLabel htmlFor="show-device-password">
+                        Show password
+                      </FieldLabel>
                     </Field>
                   </div>
                 </Field>

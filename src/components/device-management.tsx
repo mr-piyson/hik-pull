@@ -38,7 +38,9 @@ export function DeviceManagement({
           <p className="text-sm font-medium text-muted-foreground">
             Infrastructure
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">Devices</h1>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+            Devices
+          </h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
             Register each reachable Hikvision terminal. Credentials stay on the
             server and are never shown back in the browser.

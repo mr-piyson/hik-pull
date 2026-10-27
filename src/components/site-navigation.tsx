@@ -6,14 +6,16 @@ import {
   CalendarClock,
   LayoutDashboard,
   Settings2,
+  UserCog,
   Users,
   Webcam,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/auth-client";
 
-const LINKS = [
+const BASE_LINKS = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
   { href: "/people", label: "People", icon: Users },
   { href: "/devices", label: "Devices", icon: Webcam },
@@ -25,6 +27,25 @@ const LINKS = [
 
 export function SiteNavigation() {
   const pathname = usePathname();
+  const { data: session, isPending } = useSession();
+
+  if (isPending) return null;
+  if (!session) return null;
+  if (
+    pathname === "/sign-in" ||
+    pathname.startsWith("/sign-in/") ||
+    pathname === "/sign-up" ||
+    pathname.startsWith("/sign-up/") ||
+    pathname === "/auth-error" ||
+    pathname.startsWith("/auth-error/")
+  ) {
+    return null;
+  }
+
+  const links =
+    session.user.role === "admin"
+      ? [...BASE_LINKS, { href: "/users", label: "Users", icon: UserCog }]
+      : BASE_LINKS;
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
@@ -54,7 +75,7 @@ export function SiteNavigation() {
           aria-label="Main navigation"
           className="-mx-1 flex gap-1 overflow-x-auto pb-0.5"
         >
-          {LINKS.map(({ href, label, icon: Icon }) => {
+          {links.map(({ href, label, icon: Icon }) => {
             const active =
               href === "/"
                 ? pathname === "/"

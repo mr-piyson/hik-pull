@@ -6,6 +6,7 @@ type Session = {
     id: string;
     email: string;
     name: string;
+    role?: string;
   };
 };
 
@@ -20,8 +21,17 @@ export async function middleware(request: NextRequest) {
     },
   );
 
+  const pathname = request.nextUrl.pathname;
+
   if (!session) {
     return NextResponse.redirect(new URL("/sign-in", request.url));
+  }
+
+  if (
+    (pathname === "/users" || pathname.startsWith("/users/")) &&
+    session.user.role !== "admin"
+  ) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();
@@ -29,6 +39,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api/auth|sign-in|sign-up|_next/static|_next/image|favicon.ico).*)",
+    "/((?!api/auth|api/trpc|sign-in|sign-up|_next/static|_next/image|favicon.ico).*)",
   ],
 };

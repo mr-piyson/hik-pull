@@ -165,14 +165,10 @@ export function DeviceTable({
                   {device.username}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {(info || meta?.model) ? (
+                  {info || meta?.model ? (
                     <>
-                      <span className="block">
-                        {model || "Unknown model"}
-                      </span>
-                      <span className="block font-mono">
-                        {firmwareVersion}
-                      </span>
+                      <span className="block">{model || "Unknown model"}</span>
+                      <span className="block font-mono">{firmwareVersion}</span>
                     </>
                   ) : (
                     "—"

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,15 +14,36 @@ import {
 } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { signUp } from "@/lib/auth-client";
+import { signUp, useSession } from "@/lib/auth-client";
+import { trpc } from "@/trpc/client";
 
 export default function SignUpPage() {
   const router = useRouter();
+  const { data: session, isPending } = useSession();
+  const [hasUsers, setHasUsers] = useState<boolean | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    void trpc.system.bootstrap
+      .query()
+      .then((result) => setHasUsers(result.hasUsers))
+      .catch(() => setHasUsers(true));
+  }, []);
+
+  useEffect(() => {
+    if (isPending || hasUsers === null) return;
+    if (session) {
+      router.replace("/");
+      return;
+    }
+    if (hasUsers) {
+      router.replace("/sign-in");
+    }
+  }, [session, isPending, hasUsers, router]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
