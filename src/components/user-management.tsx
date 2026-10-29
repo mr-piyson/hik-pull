@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -161,6 +162,7 @@ export function UserManagement({
   mode: "directory" | "create" | "edit";
   initialUser?: ManagedUser;
 }) {
+  const router = useRouter();
   const isDirectory = mode === "directory";
   const [editingId, setEditingId] = useState<string | null>(
     mode === "edit" ? (initialUser?.id ?? null) : null,
@@ -298,13 +300,12 @@ export function UserManagement({
         message = `Photo optimized to ${(photoPayload.sizeBytes / 1024).toFixed(1)} KB. ${syncSummary(photoPayload.results ?? [])}`;
       }
       setFeedback(message);
-      if (!editingId) {
-        setForm(EMPTY_FORM);
-        setSavedPhotoUrl(null);
-      } else {
-        setForm(toForm(savedUser));
-      }
       setPhotoFile(null);
+      if (!editingId) {
+        router.push("/people");
+        return;
+      }
+      setForm(toForm(savedUser));
       await reload();
     } catch (failure) {
       if (savedUser && photoFile) {
