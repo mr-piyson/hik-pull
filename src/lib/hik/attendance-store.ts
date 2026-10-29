@@ -307,6 +307,8 @@ export async function listAttendanceLogs(
   offset = 0,
   limit = 100,
   syncStatus?: CloudSyncStatus,
+  dateFrom?: string | null,
+  dateTo?: string | null,
 ): Promise<{
   logs: AttendanceLogEntry[];
   total: number;
@@ -326,22 +328,28 @@ export async function listAttendanceLogs(
       },
     ],
   };
-  const where = syncStatus
-    ? {
-        AND: [
-          personWhere,
-          syncStatus === "PENDING"
-            ? {
-                OR: [
-                  { outbox: { status: "PENDING" } },
-                  // Rows queued before the outbox existed have no entry yet.
-                  { outbox: { is: null } },
-                ],
-              }
-            : { outbox: { status: syncStatus } },
-        ],
-      }
-    : personWhere;
+  const andConditions: Array<Record<string, unknown>> = [personWhere];
+  if (syncStatus) {
+    andConditions.push(
+      syncStatus === "PENDING"
+        ? {
+            OR: [
+              { outbox: { status: "PENDING" } },
+              // Rows queued before the outbox existed have no entry yet.
+              { outbox: { is: null } },
+            ],
+          }
+        : { outbox: { status: syncStatus } },
+    );
+  }
+  if (dateFrom) {
+    andConditions.push({ dateTime: { gte: new Date(`${dateFrom}T00:00:00`) } });
+  }
+  if (dateTo) {
+    andConditions.push({ dateTime: { lte: new Date(`${dateTo}T23:59:59.999`) } });
+  }
+  const where =
+    andConditions.length > 1 ? { AND: andConditions } : andConditions[0];
   const [rows, total] = await Promise.all([
     prisma.attendanceLog.findMany({
       where,

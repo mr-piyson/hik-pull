@@ -20,10 +20,24 @@ export const attendanceRouter = router({
         offset: z.number().int().min(0).max(2_147_483_647).default(0),
         limit: z.number().int().min(1).max(500).default(100),
         syncStatus: z.enum(["PENDING", "SYNCED", "FAILED"]).optional(),
+        dateFrom: z
+          .string()
+          .regex(/^\\d{4}-\\d{2}-\\d{2}$/)
+          .optional(),
+        dateTo: z
+          .string()
+          .regex(/^\\d{4}-\\d{2}-\\d{2}$/)
+          .optional(),
       }),
     )
     .query(({ input }) =>
-      listAttendanceLogs(input.offset, input.limit, input.syncStatus),
+      listAttendanceLogs(
+        input.offset,
+        input.limit,
+        input.syncStatus,
+        input.dateFrom,
+        input.dateTo,
+      ),
     ),
 
   /** Pull event history from every configured terminal on demand. */
