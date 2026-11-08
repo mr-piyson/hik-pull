@@ -1,33 +1,27 @@
-import Link from "next/link";
+import { ArrowLeft, ShieldAlert } from "lucide-react";
+import { AuthLayout } from "@/components/auth-layout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { ButtonLink } from "@/components/ui/button";
 
 export default function AuthErrorPage() {
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 items-center justify-center px-4 py-12">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Authentication issue</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Alert variant="destructive">
-            <AlertTitle>Authentication error occurred.</AlertTitle>
-            <AlertDescription>Please try signing in again.</AlertDescription>
-          </Alert>
-        </CardContent>
-        <CardFooter>
-          <Link href="/sign-in">
-            <Button>Back to sign in</Button>
-          </Link>
-        </CardFooter>
-      </Card>
-    </main>
+    <AuthLayout
+      title="Authentication issue"
+      description="The sign-in attempt could not be completed."
+    >
+      <div className="flex flex-col gap-4">
+        <Alert variant="destructive">
+          <ShieldAlert aria-hidden="true" />
+          <AlertTitle>Authentication error occurred</AlertTitle>
+          <AlertDescription>
+            Your session could not be verified. Please try signing in again.
+          </AlertDescription>
+        </Alert>
+        <ButtonLink href="/sign-in" className="h-9 w-full">
+          <ArrowLeft data-icon="inline-start" aria-hidden="true" />
+          Back to sign in
+        </ButtonLink>
+      </div>
+    </AuthLayout>
   );
 }

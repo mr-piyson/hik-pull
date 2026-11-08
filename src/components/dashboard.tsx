@@ -2,228 +2,319 @@ import {
   Activity,
   ArrowDownUp,
   ArrowRight,
+  ArrowUpRight,
+  CalendarClock,
   CircleAlert,
+  Plus,
+  Radio,
   Users,
   Webcam,
 } from "lucide-react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Avatar } from "@/components/avatar";
+import { PageBody, PageHeader, SectionHeading } from "@/components/page-header";
+import { RelativeTime } from "@/components/relative-time";
+import { StatCard } from "@/components/stat-card";
+import { StatusPill } from "@/components/status-pill";
+import { SystemPulse } from "@/components/system-pulse";
+import { ButtonLink } from "@/components/ui/button";
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
+  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { formatNumber } from "@/lib/format";
 import type { UserSyncLogEntry } from "@/lib/hik/user-types";
 
-const SECTIONS = [
+const QUICK_LINKS = [
   {
     href: "/people",
-    title: "People",
-    description: "Manage identity records, cards, and face photos.",
+    title: "Directory",
+    description: "People, cards and face photos",
     icon: Users,
   },
   {
     href: "/devices",
-    title: "Devices",
-    description: "Configure terminals and check connectivity.",
+    title: "Terminals",
+    description: "Connectivity and credentials",
     icon: Webcam,
   },
   {
     href: "/access-events",
-    title: "Access events",
-    description: "Review event history and follow live terminal streams.",
-    icon: Activity,
+    title: "Live events",
+    description: "Follow a terminal in real time",
+    icon: Radio,
   },
   {
-    href: "/sync-history",
-    title: "Sync audit",
-    description: "Inspect device updates and retry failed user syncs.",
-    icon: ArrowDownUp,
+    href: "/attendance",
+    title: "Attendance",
+    description: "Authentications with cloud state",
+    icon: CalendarClock,
   },
 ] as const;
 
 export function Dashboard({
   deviceCount,
+  onlineDevices,
   userCount,
   eventCount,
+  eventsToday,
   failedSyncCount,
   recentSyncs,
 }: {
   deviceCount: number;
+  onlineDevices: number;
   userCount: number;
   eventCount: number;
+  eventsToday: number;
   failedSyncCount: number;
   recentSyncs: UserSyncLogEntry[];
 }) {
+  const needsSetup = deviceCount === 0;
+
   return (
-    <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <section className="flex flex-col justify-between gap-5 rounded-xl bg-primary p-6 text-primary-foreground sm:flex-row sm:items-end sm:p-8">
-        <div className="max-w-2xl">
-          <p className="text-sm font-medium opacity-75">Operations overview</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Access management, in sync.
-          </h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 opacity-80">
-            Manage people centrally, distribute access identity to Hikvision
-            terminals, and keep a clear record of device activity.
-          </p>
-        </div>
-        <Link href="/people">
-          <Button variant="secondary" className="w-fit">
-            Manage people
-            <ArrowRight data-icon="inline-end" aria-hidden="true" />
-          </Button>
-        </Link>
-      </section>
+    <PageBody>
+      <PageHeader
+        eyebrow="Operations"
+        title="Access overview"
+        description="One workspace for identity, terminals and the events they record. Changes flow from the master directory to every configured device."
+        actions={
+          <>
+            <ButtonLink href="/access-events" variant="outline" size="default">
+              <Radio data-icon="inline-start" aria-hidden="true" />
+              Live events
+            </ButtonLink>
+            <ButtonLink href="/people/new" size="default">
+              <Plus data-icon="inline-start" aria-hidden="true" />
+              Add person
+            </ButtonLink>
+          </>
+        }
+      />
 
       <section
         aria-label="Workspace metrics"
-        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
       >
-        <Metric label="Configured devices" value={deviceCount} icon={Webcam} />
-        <Metric label="Master users" value={userCount} icon={Users} />
-        <Metric
-          label="Stored access events"
-          value={eventCount}
-          icon={Activity}
+        <StatCard
+          label="Configured devices"
+          value={formatNumber(deviceCount)}
+          hint={
+            deviceCount === 0
+              ? "No terminals registered yet"
+              : `${onlineDevices} online · ${deviceCount - onlineDevices} unreachable`
+          }
+          icon={Webcam}
+          tone={deviceCount === 0 ? "warning" : "primary"}
         />
-        <Metric
-          label="Failed sync attempts"
-          value={failedSyncCount}
+        <StatCard
+          label="Master people"
+          value={formatNumber(userCount)}
+          hint="Identities synced across terminals"
+          icon={Users}
+          tone="info"
+        />
+        <StatCard
+          label="Access events stored"
+          value={formatNumber(eventCount)}
+          hint={`${formatNumber(eventsToday)} recorded today`}
+          icon={Activity}
+          tone="success"
+        />
+        <StatCard
+          label="Sync issues"
+          value={formatNumber(failedSyncCount)}
+          hint={
+            failedSyncCount === 0
+              ? "All device updates confirmed"
+              : "Review and retry from sync history"
+          }
           icon={CircleAlert}
-          warning={failedSyncCount > 0}
+          tone={failedSyncCount > 0 ? "danger" : "success"}
         />
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="flex flex-col gap-3">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">Workspace</h2>
-            <p className="text-sm text-muted-foreground">
-              Go directly to an entity or operational view.
-            </p>
+      {needsSetup ? <SetupChecklist hasPeople={userCount > 0} /> : null}
+
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(19rem,0.9fr)]">
+        <div className="flex min-w-0 flex-col gap-3">
+          <SectionHeading
+            title="Recent sync activity"
+            description="Latest identity updates pushed to terminals"
+            icon={ArrowDownUp}
+            action={
+              <ButtonLink href="/sync-history" variant="ghost" size="sm">
+                View all
+                <ArrowRight data-icon="inline-end" aria-hidden="true" />
+              </ButtonLink>
+            }
+          />
+
+          <div className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/8">
+            {recentSyncs.length > 0 ? (
+              <ul className="divide-y">
+                {recentSyncs.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex flex-wrap items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40 sm:flex-nowrap"
+                  >
+                    <Avatar name={entry.userName} size="sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {entry.userName}
+                        <span className="ml-2 font-mono text-[11px] font-normal text-muted-foreground">
+                          {entry.employeeNo}
+                        </span>
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        <span className="capitalize">{entry.operation}</span>
+                        {" · "}
+                        {entry.deviceLabel}
+                      </p>
+                    </div>
+                    <StatusPill
+                      tone={entry.status === "success" ? "success" : "danger"}
+                    >
+                      {entry.status === "success" ? "Synced" : "Failed"}
+                    </StatusPill>
+                    <RelativeTime
+                      value={entry.createdAt}
+                      className="w-16 shrink-0 text-right text-xs text-muted-foreground tabular-nums"
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <Empty className="border-0 py-10">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <ArrowDownUp aria-hidden="true" />
+                  </EmptyMedia>
+                  <EmptyTitle>No sync activity yet</EmptyTitle>
+                  <EmptyDescription>
+                    Saving a person pushes the change to every terminal. Results
+                    will appear here.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <ButtonLink href="/people/new" size="sm" variant="outline">
+                    Add the first person
+                  </ButtonLink>
+                </EmptyContent>
+              </Empty>
+            )}
           </div>
+
           <div className="grid gap-3 sm:grid-cols-2">
-            {SECTIONS.map(({ href, title, description, icon: Icon }) => (
+            {QUICK_LINKS.map(({ href, title, description, icon: Icon }) => (
               <Link
                 key={href}
                 href={href}
-                className="group rounded-xl border bg-card p-5 transition-colors hover:bg-muted/50"
+                className="group flex items-start gap-3 rounded-xl bg-card p-4 ring-1 ring-foreground/8 transition-all hover:ring-primary/25"
               >
-                <div className="mb-4 grid size-9 place-items-center rounded-lg bg-muted text-foreground">
-                  <Icon className="size-4" aria-hidden="true" />
-                </div>
-                <h3 className="font-medium">{title}</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {description}
-                </p>
-                <span className="mt-4 inline-flex items-center gap-1 text-sm font-medium">
-                  Open section
-                  <ArrowRight
-                    className="size-4 transition-transform group-hover:translate-x-0.5"
-                    aria-hidden="true"
-                  />
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                  <Icon aria-hidden="true" className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1 text-sm font-medium">
+                    {title}
+                    <ArrowUpRight
+                      aria-hidden="true"
+                      className="size-3.5 text-muted-foreground opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
+                    />
+                  </span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    {description}
+                  </span>
                 </span>
               </Link>
             ))}
           </div>
         </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle>Recent sync activity</CardTitle>
-              <CardDescription>
-                Latest user updates across configured terminals.
-              </CardDescription>
-            </div>
-            <Link href="/sync-history">
-              <Button variant="ghost" size="sm">
-                View all
+        <div className="flex min-w-0 flex-col gap-3">
+          <SectionHeading
+            title="Live status"
+            description="Collector, queue and terminals"
+            icon={Activity}
+            action={
+              <ButtonLink href="/settings" variant="ghost" size="sm">
+                Configure
                 <ArrowRight data-icon="inline-end" aria-hidden="true" />
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent>
-            {recentSyncs.length > 0 ? (
-              <ul className="divide-y">
-                {recentSyncs.map((entry) => (
-                  <li
-                    key={entry.id}
-                    className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">
-                        {entry.userName}
-                        <span className="ml-2 font-mono text-xs text-muted-foreground">
-                          {entry.employeeNo}
-                        </span>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {entry.operation} · {entry.deviceLabel}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={
-                        entry.status === "success" ? "secondary" : "destructive"
-                      }
-                    >
-                      {entry.status}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Empty className="min-h-48 border">
-                <EmptyHeader>
-                  <EmptyTitle>No sync activity yet</EmptyTitle>
-                  <EmptyDescription>
-                    User changes and device sync results will appear here.
-                  </EmptyDescription>
-                </EmptyHeader>
-              </Empty>
-            )}
-          </CardContent>
-        </Card>
+              </ButtonLink>
+            }
+          />
+          <SystemPulse showHeader={false} />
+        </div>
       </section>
-    </main>
+    </PageBody>
   );
 }
 
-function Metric({
-  label,
-  value,
-  icon: Icon,
-  warning = false,
-}: {
-  label: string;
-  value: number;
-  icon: typeof Webcam;
-  warning?: boolean;
-}) {
+function SetupChecklist({ hasPeople }: { hasPeople: boolean }) {
+  const steps = [
+    {
+      label: "Register a terminal",
+      description: "Host, credentials and attendance direction.",
+      href: "/devices/new",
+      done: false,
+    },
+    {
+      label: "Add people to the directory",
+      description: "Employee number, cards and an optional face photo.",
+      href: "/people/new",
+      done: hasPeople,
+    },
+    {
+      label: "Verify live collection",
+      description: "Open a terminal stream and trigger an authentication.",
+      href: "/access-events",
+      done: false,
+    },
+  ];
+
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
-        <CardDescription>{label}</CardDescription>
-        <Icon
-          className={
-            warning ? "size-4 text-destructive" : "size-4 text-muted-foreground"
-          }
-          aria-hidden="true"
-        />
-      </CardHeader>
-      <CardContent>
-        <CardTitle className="text-3xl">{value}</CardTitle>
-      </CardContent>
-    </Card>
+    <section className="rounded-xl bg-card p-5 ring-1 ring-foreground/8">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">
+            Finish setting up your workspace
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Three short steps until events start landing here.
+          </p>
+        </div>
+        <StatusPill tone="warning">Setup incomplete</StatusPill>
+      </div>
+      <ol className="mt-4 grid gap-3 sm:grid-cols-3">
+        {steps.map((step, index) => (
+          <li key={step.label}>
+            <Link
+              href={step.href}
+              className="group flex h-full flex-col gap-1.5 rounded-lg border border-dashed p-3.5 transition-colors hover:border-primary/40 hover:bg-primary/5"
+            >
+              <span className="flex items-center gap-2">
+                <span
+                  className={
+                    step.done
+                      ? "grid size-5 place-items-center rounded-full bg-success/15 text-[10px] font-semibold text-success"
+                      : "grid size-5 place-items-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground"
+                  }
+                >
+                  {step.done ? "✓" : index + 1}
+                </span>
+                <span className="text-[13px] font-medium">{step.label}</span>
+              </span>
+              <span className="text-xs leading-snug text-muted-foreground">
+                {step.description}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

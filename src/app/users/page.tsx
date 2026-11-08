@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { AccountManagement } from "@/components/account-management";
+import { PageBody } from "@/components/page-header";
+import { Skeleton } from "@/components/ui/skeleton";
 import { authClient } from "@/lib/auth-client";
 
 export default function UsersPage() {
@@ -20,7 +22,21 @@ export default function UsersPage() {
     }
   }, [session, isPending, router]);
 
-  if (isPending || !session || session.user.role !== "admin") {
+  if (isPending) {
+    return (
+      <PageBody>
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-3 w-28" />
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-full max-w-lg" />
+        </div>
+        <Skeleton className="h-28 w-full rounded-xl" />
+        <Skeleton className="h-72 w-full rounded-xl" />
+      </PageBody>
+    );
+  }
+
+  if (!session || session.user.role !== "admin") {
     return null;
   }
 

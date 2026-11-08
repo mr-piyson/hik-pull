@@ -1,30 +1,20 @@
 "use client";
 
+import { Radio, RefreshCw, ServerCog, Square, Webcam } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { PageBody, PageHeader } from "@/components/page-header";
+import { StatusPill } from "@/components/status-pill";
+import { Button, ButtonLink } from "@/components/ui/button";
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
+  EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Field, FieldLabel } from "@/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { PublicDevice } from "@/lib/hik/types";
+import { cn } from "@/lib/utils";
 import { EventLog } from "./event-log";
 import { useDeviceStream } from "./use-device-stream";
 
@@ -43,66 +33,67 @@ export function AccessEventsViewer({
   const { stream, events, stop, reload } = useDeviceStream(activeId);
   const activeDevice = devices.find((device) => device.id === activeId) ?? null;
 
-  return (
-    <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <header>
-        <p className="text-sm font-medium text-muted-foreground">Monitoring</p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-          Access events
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Review saved history and follow new events from one terminal at a
-          time.
-        </p>
-      </header>
+  const selectDevice = (nextId: string) => {
+    if (activeId === nextId) {
+      return;
+    }
+    if (activeId) {
+      void stop().then((stopped) => {
+        if (stopped) {
+          setActiveId(nextId);
+        }
+      });
+      return;
+    }
+    setActiveId(nextId);
+  };
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Terminal stream</CardTitle>
-          <CardDescription>
-            Select a configured terminal to review its recent history and
-            monitor new events.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-3">
-          <Field className="min-w-64 flex-1">
-            <FieldLabel htmlFor="event-terminal">Terminal</FieldLabel>
-            <Select
-              value={activeId}
-              onValueChange={(nextId) => {
-                if (activeId && activeId !== nextId) {
-                  void stop().then((stopped) => {
-                    if (stopped) {
-                      setActiveId(nextId || null);
-                    }
-                  });
-                  return;
+  return (
+    <PageBody>
+      <PageHeader
+        eyebrow="Monitoring"
+        title="Access events"
+        description="Review a terminal's recent history and follow new authentications live. History requests and the live stream are deduplicated into one ordered feed."
+        meta={
+          activeDevice ? (
+            <>
+              <StatusPill
+                tone={
+                  stream.status === "live"
+                    ? "success"
+                    : stream.status === "error"
+                      ? "danger"
+                      : "warning"
                 }
-                setActiveId(nextId || null);
-              }}
-              disabled={devices.length === 0}
-            >
-              <SelectTrigger id="event-terminal" className="w-full">
-                <SelectValue placeholder="Select a terminal" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  {devices.map((device) => (
-                    <SelectItem key={device.id} value={device.id}>
-                      {device.label} · {device.host}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
-          {activeDevice ? (
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={reload}>
-                Reload history
+                pulse={stream.status === "live"}
+                icon={Radio}
+              >
+                {stream.status === "live"
+                  ? "Live"
+                  : stream.status === "connecting"
+                    ? "Connecting"
+                    : stream.status === "error"
+                      ? "Connection issue"
+                      : "Idle"}
+              </StatusPill>
+              <StatusPill tone="neutral">
+                {events.length} events loaded
+              </StatusPill>
+            </>
+          ) : (
+            <StatusPill tone="neutral" icon={Webcam}>
+              No terminal selected
+            </StatusPill>
+          )
+        }
+        actions={
+          activeDevice ? (
+            <>
+              <Button variant="outline" onClick={reload}>
+                <RefreshCw data-icon="inline-start" aria-hidden="true" />
+                Reload
               </Button>
               <Button
-                type="button"
                 variant="outline"
                 onClick={() => {
                   void stop().then((stopped) => {
@@ -112,23 +103,79 @@ export function AccessEventsViewer({
                   });
                 }}
               >
-                Stop stream
+                <Square data-icon="inline-start" aria-hidden="true" />
+                Stop
               </Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+            </>
+          ) : devices.length > 0 ? (
+            <Button onClick={() => selectDevice(devices[0].id)}>
+              <Radio data-icon="inline-start" aria-hidden="true" />
+              Start with {devices[0].label}
+            </Button>
+          ) : null
+        }
+      />
 
       {devices.length === 0 ? (
-        <Empty className="min-h-48 border">
+        <Empty className="rounded-xl border border-dashed py-16">
           <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ServerCog aria-hidden="true" />
+            </EmptyMedia>
             <EmptyTitle>No terminals configured</EmptyTitle>
             <EmptyDescription>
-              Add a device before viewing access events.
+              Register a terminal first — access events are read from a device.
             </EmptyDescription>
           </EmptyHeader>
+          <EmptyContent>
+            <ButtonLink href="/devices/new" size="sm">
+              Add a device
+            </ButtonLink>
+          </EmptyContent>
         </Empty>
-      ) : null}
+      ) : (
+        <section
+          aria-label="Select terminal"
+          className="scrollbar-subtle -mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+        >
+          {devices.map((device) => {
+            const active = device.id === activeId;
+            return (
+              <button
+                key={device.id}
+                type="button"
+                onClick={() => selectDevice(device.id)}
+                aria-pressed={active}
+                className={cn(
+                  "group flex min-w-[13rem] flex-col gap-1.5 rounded-xl border bg-card px-4 py-3 text-left transition-all outline-none hover:border-primary/40 focus-visible:ring-3 focus-visible:ring-ring/40",
+                  active
+                    ? "border-primary/50 ring-1 ring-primary/25"
+                    : "border-transparent ring-1 ring-foreground/8",
+                )}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium">
+                    {device.label}
+                  </span>
+                  <span
+                    className={cn(
+                      "size-1.5 shrink-0 rounded-full",
+                      active
+                        ? "bg-success pulse-dot"
+                        : device.status === "online"
+                          ? "bg-success"
+                          : "bg-muted-foreground/50",
+                    )}
+                  />
+                </span>
+                <span className="truncate font-mono text-[11px] text-muted-foreground">
+                  {device.host}:{device.port}
+                </span>
+              </button>
+            );
+          })}
+        </section>
+      )}
 
       {devices.length > 0 ? (
         <EventLog
@@ -139,6 +186,6 @@ export function AccessEventsViewer({
           onReload={reload}
         />
       ) : null}
-    </main>
+    </PageBody>
   );
 }

@@ -1,17 +1,12 @@
 "use client";
 
+import { ArrowRight, LoaderCircle, LogIn, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { AuthLayout, PasswordInput } from "@/components/auth-layout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { signIn, useSession } from "@/lib/auth-client";
@@ -23,6 +18,7 @@ export default function SignInPage() {
   const [hasUsers, setHasUsers] = useState<boolean | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -66,62 +62,73 @@ export default function SignInPage() {
   };
 
   return (
-    <main className="mx-auto flex w-full max-w-lg flex-1 items-center justify-center px-4 py-12">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle className="text-2xl">Sign in</CardTitle>
-          <CardDescription>
-            Sign in to manage your access operations workspace.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="email">Email</FieldLabel>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  placeholder="Enter your password"
-                  autoComplete="current-password"
-                />
-              </Field>
-            </FieldGroup>
-            {error ? (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-            <Button type="submit" disabled={loading} className="w-full">
-              {loading ? "Signing in…" : "Sign in"}
-            </Button>
-            <p className="text-center text-sm text-muted-foreground">
-              Need an account?{" "}
-              <Link
-                href="/sign-up"
-                className="font-medium text-foreground underline underline-offset-4"
-              >
-                Create one
-              </Link>
-            </p>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
+    <AuthLayout
+      title="Sign in"
+      description="Use the account an administrator created for you."
+      footer={
+        <p className="text-center text-sm text-muted-foreground">
+          Need an account?{" "}
+          <Link
+            href="/sign-up"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-primary"
+          >
+            Create one
+          </Link>
+        </p>
+      }
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <FieldGroup className="gap-4">
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+              placeholder="you@example.com"
+              autoComplete="email"
+              className="h-9"
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <PasswordInput
+              id="password"
+              value={password}
+              onChange={setPassword}
+              placeholder="Enter your password"
+              autoComplete="current-password"
+              visible={showPassword}
+              onToggle={() => setShowPassword((value) => !value)}
+            />
+          </Field>
+        </FieldGroup>
+
+        {error ? (
+          <Alert variant="destructive">
+            <TriangleAlert aria-hidden="true" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Button type="submit" disabled={loading} className="h-9 w-full">
+          {loading ? (
+            <LoaderCircle
+              data-icon="inline-start"
+              aria-hidden="true"
+              className="animate-spin"
+            />
+          ) : (
+            <LogIn data-icon="inline-start" aria-hidden="true" />
+          )}
+          {loading ? "Signing in…" : "Sign in"}
+          {loading ? null : (
+            <ArrowRight data-icon="inline-end" aria-hidden="true" />
+          )}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

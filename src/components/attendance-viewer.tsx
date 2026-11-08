@@ -3,29 +3,25 @@
 import {
   CalendarClock,
   Check,
-  Clock3,
   CloudDownload,
   Download,
   LoaderCircle,
   LogIn,
   LogOut,
-  type LucideIcon,
   Minus,
+  RefreshCw,
   Search,
   SearchX,
   TriangleAlert,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Avatar } from "@/components/avatar";
+import { PageBody, PageHeader } from "@/components/page-header";
+import { StatusPill, type StatusTone } from "@/components/status-pill";
+import { useToast } from "@/components/toast";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-} from "@/components/ui/card";
 import {
   Empty,
   EmptyDescription,
@@ -50,6 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import type {
   AttendanceLogEntry,
   CloudSyncStatus,
@@ -65,9 +62,26 @@ type AttendancePage = {
 
 type SyncFilter = "ALL" | CloudSyncStatus;
 
-function display(value: string | null): string {
-  return value ?? "—";
-}
+const SYNC_TONE: Record<CloudSyncStatus, StatusTone> = {
+  PENDING: "warning",
+  SYNCED: "success",
+  FAILED: "danger",
+};
+
+const SYNC_LABEL: Record<CloudSyncStatus, string> = {
+  PENDING: "Pending",
+  SYNCED: "Synced",
+  FAILED: "Failed",
+};
+
+const DIRECTION_META: Record<
+  GateDirection,
+  { label: string; icon: typeof LogIn; tone: StatusTone }
+> = {
+  in: { label: "In", icon: LogIn, tone: "success" },
+  out: { label: "Out", icon: LogOut, tone: "info" },
+  none: { label: "None", icon: Minus, tone: "neutral" },
+};
 
 function sortLogs(left: AttendanceLogEntry, right: AttendanceLogEntry): number {
   const leftTime = left.dateTime
@@ -79,84 +93,16 @@ function sortLogs(left: AttendanceLogEntry, right: AttendanceLogEntry): number {
   return rightTime - leftTime || right.id.localeCompare(left.id);
 }
 
-function displayDateTime(value: string | null): string {
-  if (!value) {
-    return "—";
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleString(undefined, {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: false,
-      });
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
-const SYNC_BADGES: Record<
-  CloudSyncStatus,
-  {
-    label: string;
-    icon: LucideIcon;
-    className?: string;
-    variant?: "destructive";
-  }
-> = {
-  PENDING: {
-    label: "Pending",
-    icon: Clock3,
-    className:
-      "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
-  },
-  SYNCED: {
-    label: "Synced",
-    icon: Check,
-    className:
-      "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
-  },
-  FAILED: {
-    label: "Failed",
-    icon: TriangleAlert,
-    variant: "destructive",
-  },
-};
-
-function SyncBadge({ status }: { status: CloudSyncStatus }) {
-  const meta = SYNC_BADGES[status];
-  const Icon = meta.icon;
-  return (
-    <Badge
-      variant={meta.variant ?? "outline"}
-      className={meta.className ?? "px-1.5 py-0 text-[10px]"}
-    >
-      <Icon aria-hidden="true" data-icon="inline-start" />
-      {meta.label}
-    </Badge>
-  );
+function dateInput(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-const DIRECTION_BADGES: Record<
-  GateDirection,
-  { label: string; icon: LucideIcon }
-> = {
-  in: { label: "In", icon: LogIn },
-  out: { label: "Out", icon: LogOut },
-  none: { label: "None", icon: Minus },
-};
-
-function DirectionBadge({ direction }: { direction: GateDirection }) {
-  const meta = DIRECTION_BADGES[direction];
-  const Icon = meta.icon;
-  return (
-    <Badge variant="outline" className="text-[10px]">
-      <Icon aria-hidden="true" data-icon="inline-start" />
-      {meta.label}
-    </Badge>
-  );
+function display(value: string | null): string {
+  return value ?? "—";
 }
 
 export function AttendanceViewer({
@@ -166,6 +112,7 @@ export function AttendanceViewer({
   initialPage: AttendancePage;
   refreshSeconds: number;
 }) {
+  const { toast } = useToast();
   const [logs, setLogs] = useState(initialPage.logs);
   // Rows fetched from the server so far, used as the next `Load more` offset.
   // Tracked separately from `logs.length` because the live refresh merges new
@@ -177,7 +124,6 @@ export function AttendanceViewer({
   const [loading, setLoading] = useState(false);
   const [pulling, setPulling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<SyncFilter>("ALL");
@@ -352,6 +298,11 @@ export function AttendanceViewer({
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      toast({
+        title: "Export ready",
+        description: `${all.length} record${all.length === 1 ? "" : "s"} written to CSV.`,
+        tone: "success",
+      });
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -366,14 +317,15 @@ export function AttendanceViewer({
   const pullAll = async () => {
     setPulling(true);
     setError(null);
-    setNotice(null);
     try {
       const result = await trpc.attendance.pull.mutate();
       const failureSuffix =
         result.failed > 0 ? ` (${result.failed} device(s) failed)` : "";
-      setNotice(
-        `Pulled ${result.fetched} event(s) — ${result.inserted} new — from ${result.devices} device(s)${failureSuffix}.`,
-      );
+      toast({
+        title: "Pull complete",
+        description: `${result.inserted} new of ${result.fetched} events fetched from ${result.devices} device(s)${failureSuffix}.`,
+        tone: result.failed > 0 ? "info" : "success",
+      });
       await refresh();
     } catch (failure) {
       setError(
@@ -406,6 +358,18 @@ export function AttendanceViewer({
     );
   }, [logs, search]);
 
+  const cloudCounts = useMemo(() => {
+    const counts: Record<CloudSyncStatus, number> = {
+      PENDING: 0,
+      SYNCED: 0,
+      FAILED: 0,
+    };
+    for (const log of logs) {
+      counts[log.syncStatus] += 1;
+    }
+    return counts;
+  }, [logs]);
+
   const hasFilters =
     filter !== "ALL" || dateFrom !== "" || dateTo !== "" || search !== "";
 
@@ -416,25 +380,102 @@ export function AttendanceViewer({
     setSearch("");
   };
 
-  return (
-    <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Attendance records
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Authentication history collected from your terminals, with cloud sync
-          status for each record.
-        </p>
-      </header>
+  const applyPreset = (preset: "today" | "week" | "month" | "all") => {
+    const today = new Date();
+    if (preset === "all") {
+      setDateFrom("");
+      setDateTo("");
+      return;
+    }
+    const start = new Date(today);
+    if (preset === "week") {
+      start.setDate(start.getDate() - 6);
+    }
+    if (preset === "month") {
+      start.setDate(start.getDate() - 29);
+    }
+    setDateFrom(dateInput(start));
+    setDateTo(dateInput(today));
+  };
 
-      <Card className="min-w-0 overflow-hidden">
-        <CardHeader className="flex flex-col gap-3 border-b px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+  return (
+    <PageBody>
+      <PageHeader
+        eyebrow="Monitoring"
+        title="Attendance records"
+        description="Authentication history collected from your terminals, with the cloud sync state of every record."
+        meta={
+          <>
+            <StatusPill tone="neutral" icon={CalendarClock}>
+              {formatNumber(total)} records
+            </StatusPill>
+            <StatusPill tone="warning">
+              {cloudCounts.PENDING} pending
+            </StatusPill>
+            {cloudCounts.FAILED > 0 ? (
+              <StatusPill tone="danger" icon={TriangleAlert}>
+                {cloudCounts.FAILED} failed
+              </StatusPill>
+            ) : (
+              <StatusPill tone="success" icon={Check}>
+                Cloud healthy
+              </StatusPill>
+            )}
+          </>
+        }
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void exportCsv()}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <LoaderCircle
+                  data-icon="inline-start"
+                  aria-hidden="true"
+                  className="animate-spin"
+                />
+              ) : (
+                <Download data-icon="inline-start" aria-hidden="true" />
+              )}
+              {exporting ? "Exporting…" : "Export CSV"}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void pullAll()}
+              disabled={pulling}
+            >
+              {pulling ? (
+                <LoaderCircle
+                  data-icon="inline-start"
+                  aria-hidden="true"
+                  className="animate-spin"
+                />
+              ) : (
+                <CloudDownload data-icon="inline-start" aria-hidden="true" />
+              )}
+              {pulling ? "Pulling…" : "Pull from devices"}
+            </Button>
+          </>
+        }
+      />
+
+      {error ? (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <section className="flex min-w-0 flex-col overflow-hidden rounded-xl bg-card ring-1 ring-foreground/8">
+        <div className="flex flex-col gap-3 border-b px-4 py-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
+            <div className="relative min-w-0 flex-1 sm:max-w-xs">
               <Search
                 aria-hidden="true"
-                className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-muted-foreground"
               />
               <Input
                 id="attendance-search"
@@ -442,7 +483,7 @@ export function AttendanceViewer({
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search person, card or device"
-                className="h-8 w-56 pl-8"
+                className="h-8 pl-8 text-[13px]"
                 aria-label="Search records"
               />
             </div>
@@ -476,22 +517,43 @@ export function AttendanceViewer({
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <Input
-              id="attendance-date-from"
-              type="date"
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-              className="h-8 w-36"
-              aria-label="Filter from date"
-            />
-            <Input
-              id="attendance-date-to"
-              type="date"
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-              className="h-8 w-36"
-              aria-label="Filter to date"
-            />
+            <div className="flex items-center gap-1.5">
+              <Input
+                id="attendance-date-from"
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+                className="h-8 w-[8.75rem] text-xs"
+                aria-label="Filter from date"
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <Input
+                id="attendance-date-to"
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+                className="h-8 w-[8.75rem] text-xs"
+                aria-label="Filter to date"
+              />
+            </div>
+            <div className="flex items-center gap-1">
+              {(
+                [
+                  ["today", "Today"],
+                  ["week", "7d"],
+                  ["month", "30d"],
+                ] as const
+              ).map(([preset, label]) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => applyPreset(preset)}
+                  className="rounded-full border border-transparent bg-muted/60 px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             {hasFilters ? (
               <Button
                 type="button"
@@ -499,203 +561,197 @@ export function AttendanceViewer({
                 variant="ghost"
                 size="sm"
               >
-                <X aria-hidden="true" data-icon="inline-start" />
+                <X data-icon="inline-start" aria-hidden="true" />
                 Clear
               </Button>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              onClick={() => void exportCsv()}
-              disabled={exporting}
-              variant="outline"
-              size="sm"
-            >
-              {exporting ? (
-                <LoaderCircle
-                  aria-hidden="true"
-                  data-icon="inline-start"
-                  className="animate-spin"
-                />
-              ) : (
-                <Download aria-hidden="true" data-icon="inline-start" />
-              )}
-              {exporting ? "Exporting…" : "Export CSV"}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => void pullAll()}
-              disabled={pulling}
-              size="sm"
-            >
-              {pulling ? (
-                <LoaderCircle
-                  aria-hidden="true"
-                  data-icon="inline-start"
-                  className="animate-spin"
-                />
-              ) : (
-                <CloudDownload aria-hidden="true" data-icon="inline-start" />
-              )}
-              {pulling ? "Pulling…" : "Pull from all devices"}
-            </Button>
+          <div className="flex shrink-0 items-center gap-2 text-[11px] text-muted-foreground">
+            {refreshing ? (
+              <LoaderCircle
+                aria-hidden="true"
+                className="size-3 animate-spin"
+              />
+            ) : (
+              <RefreshCw aria-hidden="true" className="size-3" />
+            )}
+            {lastUpdated
+              ? `Updated ${lastUpdated.toLocaleTimeString()}`
+              : `Auto-refresh every ${refreshSeconds}s`}
           </div>
-        </CardHeader>
-        <CardContent className="flex min-w-0 flex-col gap-3 px-4 py-3">
-          <div className="max-h-[62vh] overflow-auto rounded-md border">
-            <Table className="min-w-[62rem] text-xs [&_th]:h-8 [&_th]:px-2 [&_td]:py-1 [&_td]:px-2">
-              <TableHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="sticky left-0 z-20 bg-background">
-                    Person
-                  </TableHead>
-                  <TableHead>Card no</TableHead>
-                  <TableHead>Direction</TableHead>
-                  <TableHead>Verification</TableHead>
-                  <TableHead>Cloud</TableHead>
-                  <TableHead>Date & time</TableHead>
-                  <TableHead>Device</TableHead>
-                  <TableHead>Serial no</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleLogs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell className="sticky left-0 z-[1] bg-background">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-medium">
-                          {display(log.personName)}
-                        </span>
-                        <span className="font-mono text-[11px] text-muted-foreground">
-                          {display(log.personId)}
-                        </span>
+        </div>
+
+        <div className="scrollbar-subtle max-h-[68vh] overflow-auto">
+          <Table className="min-w-[64rem] text-xs [&_td]:px-3 [&_td]:py-2 [&_th]:px-3">
+            <TableHeader className="sticky top-0 z-20 bg-card/95 backdrop-blur">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="sticky left-0 z-30 bg-card/95 pl-4">
+                  Person
+                </TableHead>
+                <TableHead>Card</TableHead>
+                <TableHead>Direction</TableHead>
+                <TableHead>Verification</TableHead>
+                <TableHead>Cloud</TableHead>
+                <TableHead>Date &amp; time</TableHead>
+                <TableHead>Device</TableHead>
+                <TableHead className="pr-4">Serial</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleLogs.map((log) => {
+                const direction = DIRECTION_META[log.gateDirection];
+                const DirectionIcon = direction.icon;
+                return (
+                  <TableRow key={log.id} className="group">
+                    <TableCell className="sticky left-0 z-10 bg-card group-hover:bg-muted/40">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar
+                          name={log.personName ?? log.personId ?? "?"}
+                          size="xs"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-[13px] font-medium">
+                            {display(log.personName)}
+                          </p>
+                          <p className="truncate font-mono text-[10px] text-muted-foreground">
+                            {display(log.personId)}
+                          </p>
+                        </div>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
+                    <TableCell className="font-mono text-[11px]">
                       {display(log.cardNo)}
                     </TableCell>
                     <TableCell>
-                      <DirectionBadge direction={log.gateDirection} />
+                      <StatusPill tone={direction.tone} icon={DirectionIcon}>
+                        {direction.label}
+                      </StatusPill>
                     </TableCell>
-                    <TableCell className="capitalize">
+                    <TableCell className="capitalize text-muted-foreground">
                       {display(log.verification)}
                     </TableCell>
                     <TableCell>
-                      <SyncBadge status={log.syncStatus} />
+                      <StatusPill tone={SYNC_TONE[log.syncStatus]}>
+                        {SYNC_LABEL[log.syncStatus]}
+                      </StatusPill>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
-                        <span className="whitespace-nowrap text-xs">
-                          {displayDateTime(log.dateTime)}
+                        <span className="whitespace-nowrap text-[11px] tabular-nums">
+                          {formatDateTime(log.dateTime)}
                         </span>
-                        <span className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">
+                        <span className="whitespace-nowrap font-mono text-[10px] text-muted-foreground">
                           {display(log.timeRaw)}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
-                        <span>{display(log.deviceModel)}</span>
-                        <span className="font-mono text-[11px] text-muted-foreground">
+                        <span className="truncate text-[11px]">
+                          {display(log.deviceModel)}
+                        </span>
+                        <span className="font-mono text-[10px] text-muted-foreground">
                           {display(log.deviceIp)}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-xs">
+                    <TableCell className="pr-4 font-mono text-[11px]">
                       {display(log.serialNo)}
                     </TableCell>
                   </TableRow>
-                ))}
-                {logs.length === 0 ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={8} className="p-0">
-                      <Empty className="items-center border-0 py-12">
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <CalendarClock aria-hidden="true" />
-                          </EmptyMedia>
-                          <EmptyTitle>No attendance records yet</EmptyTitle>
-                          <EmptyDescription>
-                            Records appear here once they have been pulled from
-                            a terminal.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                      </Empty>
-                    </TableCell>
-                  </TableRow>
-                ) : visibleLogs.length === 0 ? (
-                  <TableRow className="hover:bg-transparent">
-                    <TableCell colSpan={8} className="p-0">
-                      <Empty className="items-center border-0 py-12">
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <SearchX aria-hidden="true" />
-                          </EmptyMedia>
-                          <EmptyTitle>No matching records</EmptyTitle>
-                          <EmptyDescription>
-                            Nothing matches the current search or filters.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={clearFilters}
-                        >
-                          <X aria-hidden="true" data-icon="inline-start" />
-                          Clear filters
-                        </Button>
-                      </Empty>
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-              </TableBody>
-            </Table>
-          </div>
-          {notice ? (
-            <Alert>
-              <AlertDescription>{notice}</AlertDescription>
-            </Alert>
-          ) : null}
-          {error ? (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          ) : null}
-          {hasMore && visibleLogs.length > 0 ? (
-            <div className="flex justify-center">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void loadMore()}
-                disabled={loading}
-              >
-                {loading ? "Loading…" : "Load more"}
-              </Button>
-            </div>
-          ) : null}
-        </CardContent>
-        <CardFooter className="flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span>
+                );
+              })}
+              {logs.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={8} className="p-0">
+                    <Empty className="items-center border-0 py-14">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <CalendarClock aria-hidden="true" />
+                        </EmptyMedia>
+                        <EmptyTitle>No attendance records yet</EmptyTitle>
+                        <EmptyDescription>
+                          Records appear as soon as a terminal reports an
+                          authentication with person data — pull from devices to
+                          backfill.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void pullAll()}
+                        disabled={pulling}
+                      >
+                        <CloudDownload
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />
+                        Pull from devices
+                      </Button>
+                    </Empty>
+                  </TableCell>
+                </TableRow>
+              ) : visibleLogs.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={8} className="p-0">
+                    <Empty className="items-center border-0 py-14">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <SearchX aria-hidden="true" />
+                        </EmptyMedia>
+                        <EmptyTitle>No matching records</EmptyTitle>
+                        <EmptyDescription>
+                          Nothing matches the current search or filters.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={clearFilters}
+                      >
+                        <X data-icon="inline-start" aria-hidden="true" />
+                        Clear filters
+                      </Button>
+                    </Empty>
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/20 px-4 py-3">
+          <p className="text-xs text-muted-foreground">
             {search.trim()
-              ? `${visibleLogs.length} of ${logs.length} loaded records match · ${total} total`
-              : `${logs.length} of ${total} records`}
-          </span>
-          <span aria-hidden="true">·</span>
-          <span className="inline-flex items-center gap-1.5">
-            {refreshing ? (
-              <LoaderCircle
-                className="size-3 animate-spin"
-                aria-hidden="true"
-              />
-            ) : null}
-            {lastUpdated
-              ? `Updated ${lastUpdated.toLocaleTimeString()}`
-              : `Auto-refreshes every ${refreshSeconds}s`}
-          </span>
-        </CardFooter>
-      </Card>
-    </main>
+              ? `${visibleLogs.length} of ${logs.length} loaded records match · ${formatNumber(total)} total`
+              : `${logs.length} of ${formatNumber(total)} records loaded`}
+          </p>
+          {hasMore && visibleLogs.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void loadMore()}
+              disabled={loading}
+            >
+              {loading ? (
+                <LoaderCircle
+                  data-icon="inline-start"
+                  aria-hidden="true"
+                  className="animate-spin"
+                />
+              ) : null}
+              {loading ? "Loading…" : "Load more"}
+            </Button>
+          ) : (
+            <span className="text-[11px] text-muted-foreground">
+              All records in this view are loaded
+            </span>
+          )}
+        </div>
+      </section>
+    </PageBody>
   );
 }

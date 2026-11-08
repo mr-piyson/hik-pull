@@ -1,20 +1,27 @@
 "use client";
 
-import Link from "next/link";
+import {
+  ArrowLeft,
+  CircleAlert,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  Lock,
+  Network,
+  ShieldCheck,
+  Webcam,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
+import { PageBody, PageHeader, SectionHeading } from "@/components/page-header";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -119,45 +126,50 @@ export function DeviceForm({
   };
 
   const title = mode === "create" ? "Add device" : "Edit device";
-  const description =
-    mode === "create"
-      ? "Connect a device on the local network."
-      : "Update connection details and configuration.";
 
   return (
-    <main className="mx-auto flex w-full max-w-[96rem] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">
-            Infrastructure
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-            {title}
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            {description}
-          </p>
-        </div>
-        <Link href="/devices">
-          <Button variant="outline">Back to devices</Button>
-        </Link>
-      </header>
+    <PageBody>
+      <PageHeader
+        eyebrow="Infrastructure"
+        title={title}
+        description={
+          mode === "create"
+            ? "Connect a terminal on the local network. Credentials are verified against the device before they are saved."
+            : "Update connection details. Leave the password blank to keep the stored one."
+        }
+        actions={
+          <ButtonLink href="/devices" variant="outline">
+            <ArrowLeft data-icon="inline-start" aria-hidden="true" />
+            Back to devices
+          </ButtonLink>
+        }
+      />
 
-      <form onSubmit={submit}>
-        <Card>
-          <CardHeader>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>
-              Credentials stay on the server and are never shown back in the
-              browser.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-col gap-5">
-              <FieldGroup className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-                <Field className="lg:col-span-2">
+      {error ? (
+        <Alert variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <form
+        onSubmit={submit}
+        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]"
+      >
+        <div className="flex min-w-0 flex-col gap-6">
+          <section className="rounded-xl bg-card ring-1 ring-foreground/8">
+            <SectionHeading
+              title="Connection"
+              description="Where the terminal answers on your network"
+              icon={Network}
+              className="border-b px-5 py-4"
+            />
+            <div className="p-5">
+              <FieldGroup className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
+                <Field className="sm:col-span-2">
                   <FieldLabel htmlFor="device-host">
-                    IP address / hostname
+                    IP address or hostname{" "}
+                    <span className="text-destructive">*</span>
                   </FieldLabel>
                   <Input
                     id="device-host"
@@ -167,17 +179,59 @@ export function DeviceForm({
                     placeholder="192.168.1.64"
                     autoComplete="off"
                     spellCheck={false}
+                    className="max-w-md font-mono"
+                  />
+                  <FieldDescription>
+                    IPv4 or hostname reachable from this server. HTTPS with
+                    self-signed certificates is not supported yet.
+                  </FieldDescription>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="device-port">Port</FieldLabel>
+                  <Input
+                    id="device-port"
+                    value={form.port}
+                    onChange={(event) =>
+                      update("port", event.target.value.replace(/\D/g, ""))
+                    }
+                    inputMode="numeric"
                     className="font-mono"
                   />
                 </Field>
                 <Field>
-                  <FieldLabel htmlFor="device-label">Label</FieldLabel>
+                  <FieldLabel htmlFor="device-scheme">Scheme</FieldLabel>
+                  <Select
+                    value={form.scheme}
+                    onValueChange={(value) => {
+                      if (value === "http" || value === "https") {
+                        update("scheme", value);
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="device-scheme" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="http">http</SelectItem>
+                        <SelectItem value="https">https</SelectItem>
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field>
+                  <FieldLabel htmlFor="device-label">Display label</FieldLabel>
                   <Input
                     id="device-label"
                     value={form.label}
                     onChange={(event) => update("label", event.target.value)}
                     placeholder="Front door"
                   />
+                  <FieldDescription>
+                    Shown on events, attendance rows and sync history.
+                  </FieldDescription>
                 </Field>
                 <Field>
                   <FieldLabel htmlFor="device-direction">
@@ -196,15 +250,33 @@ export function DeviceForm({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectGroup>
-                        <SelectItem value="in">In</SelectItem>
-                        <SelectItem value="out">Out</SelectItem>
-                        <SelectItem value="none">None</SelectItem>
+                        <SelectItem value="in">In — entry gate</SelectItem>
+                        <SelectItem value="out">Out — exit gate</SelectItem>
+                        <SelectItem value="none">None — not a gate</SelectItem>
                       </SelectGroup>
                     </SelectContent>
                   </Select>
+                  <FieldDescription>
+                    Applied to future attendance records, never retroactively.
+                  </FieldDescription>
                 </Field>
+              </FieldGroup>
+            </div>
+          </section>
+
+          <section className="rounded-xl bg-card ring-1 ring-foreground/8">
+            <SectionHeading
+              title="Credentials"
+              description="ISAPI account with access-control read permission"
+              icon={Lock}
+              className="border-b px-5 py-4"
+            />
+            <div className="p-5">
+              <FieldGroup className="grid gap-x-5 gap-y-4 sm:grid-cols-2">
                 <Field>
-                  <FieldLabel htmlFor="device-username">Username</FieldLabel>
+                  <FieldLabel htmlFor="device-username">
+                    Username <span className="text-destructive">*</span>
+                  </FieldLabel>
                   <Input
                     id="device-username"
                     required
@@ -220,80 +292,103 @@ export function DeviceForm({
                     {mode === "edit"
                       ? "Password (leave blank to keep)"
                       : "Password"}
+                    {mode === "create" ? (
+                      <span className="text-destructive"> *</span>
+                    ) : null}
                   </FieldLabel>
-                  <Input
-                    id="device-password"
-                    required={mode === "create"}
-                    type={showPassword ? "text" : "password"}
-                    value={form.password}
-                    onChange={(event) => update("password", event.target.value)}
-                    autoComplete={mode === "create" ? "new-password" : "off"}
-                    className="font-mono"
-                  />
-                </Field>
-                <Field className="sm:col-span-2 lg:col-span-3">
-                  <FieldLabel>Connection</FieldLabel>
-                  <div className="flex gap-2">
+                  <div className="relative">
                     <Input
-                      aria-label="Port"
-                      value={form.port}
+                      id="device-password"
+                      required={mode === "create"}
+                      type={showPassword ? "text" : "password"}
+                      value={form.password}
                       onChange={(event) =>
-                        update("port", event.target.value.replace(/\D/g, ""))
+                        update("password", event.target.value)
                       }
-                      inputMode="numeric"
-                      className="w-24 font-mono"
+                      autoComplete={mode === "create" ? "new-password" : "off"}
+                      className="pr-9 font-mono"
                     />
-                    <Select
-                      value={form.scheme}
-                      onValueChange={(value) => {
-                        if (value === "http" || value === "https") {
-                          update("scheme", value);
-                        }
-                      }}
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((value) => !value)}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                      aria-pressed={showPassword}
+                      className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                     >
-                      <SelectTrigger aria-label="Scheme" className="w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="http">http</SelectItem>
-                          <SelectItem value="https">https</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <Field
-                      orientation="horizontal"
-                      className="ml-2 items-center"
-                    >
-                      <Checkbox
-                        id="show-device-password"
-                        checked={showPassword}
-                        onCheckedChange={(checked) =>
-                          setShowPassword(checked === true)
-                        }
-                      />
-                      <FieldLabel htmlFor="show-device-password">
-                        Show password
-                      </FieldLabel>
-                    </Field>
+                      {showPassword ? (
+                        <EyeOff aria-hidden="true" className="size-3.5" />
+                      ) : (
+                        <Eye aria-hidden="true" className="size-3.5" />
+                      )}
+                    </button>
                   </div>
+                  <FieldDescription>
+                    Digest authentication is used; the password never leaves the
+                    server after saving.
+                  </FieldDescription>
                 </Field>
               </FieldGroup>
-
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-wrap justify-end gap-2">
-            <Link href="/devices">
-              <Button variant="outline" type="button">
-                Cancel
-              </Button>
-            </Link>
+          </section>
+        </div>
+
+        <aside className="flex min-w-0 flex-col gap-4 xl:sticky xl:top-24 xl:self-start">
+          <div className="rounded-xl bg-card p-5 ring-1 ring-foreground/8">
+            <h3 className="flex items-center gap-1.5 text-sm font-medium">
+              <ShieldCheck
+                aria-hidden="true"
+                className="size-4 text-muted-foreground"
+              />
+              Security
+            </h3>
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              Credentials are stored in the local SQLite database and only used
+              server-side. No API response ever includes the password — the UI
+              only knows whether one is stored.
+            </p>
+          </div>
+          <div className="rounded-xl bg-card p-5 ring-1 ring-foreground/8">
+            <h3 className="flex items-center gap-1.5 text-sm font-medium">
+              <Webcam
+                aria-hidden="true"
+                className="size-4 text-muted-foreground"
+              />
+              Before you save
+            </h3>
+            <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-4 text-xs leading-relaxed text-muted-foreground">
+              <li>The terminal must be reachable from this server.</li>
+              <li>
+                The account needs access-control read permission for events and
+                face-library write permission for photos.
+              </li>
+              <li>
+                Live streams may take 20–25 seconds to open on DS-K1T671MF-class
+                devices.
+              </li>
+            </ul>
+          </div>
+        </aside>
+
+        <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t bg-background/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:mx-0 lg:col-span-2 lg:rounded-xl lg:border lg:px-5">
+          <p className="text-xs text-muted-foreground">
+            {mode === "create"
+              ? "The connection is tested before the device is saved."
+              : "Changing the host or port restarts the live stream."}
+          </p>
+          <div className="flex items-center gap-2">
+            <ButtonLink href="/devices" variant="outline">
+              Cancel
+            </ButtonLink>
             <Button type="submit" disabled={busy}>
+              {busy ? (
+                <LoaderCircle
+                  data-icon="inline-start"
+                  aria-hidden="true"
+                  className="animate-spin"
+                />
+              ) : null}
               {busy
                 ? mode === "create"
                   ? "Testing connection…"
@@ -302,9 +397,9 @@ export function DeviceForm({
                   ? "Add device"
                   : "Save changes"}
             </Button>
-          </CardFooter>
-        </Card>
+          </div>
+        </div>
       </form>
-    </main>
+    </PageBody>
   );
 }

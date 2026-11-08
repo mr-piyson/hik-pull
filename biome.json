@@ -13,7 +13,8 @@
       "!.next",
       "!dist",
       "!build",
-      "!cloud-api"
+      "!cloud-api",
+      "!graphify-out"
     ]
   },
   "formatter": {

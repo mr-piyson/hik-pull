@@ -346,7 +346,9 @@ export async function listAttendanceLogs(
     andConditions.push({ dateTime: { gte: new Date(`${dateFrom}T00:00:00`) } });
   }
   if (dateTo) {
-    andConditions.push({ dateTime: { lte: new Date(`${dateTo}T23:59:59.999`) } });
+    andConditions.push({
+      dateTime: { lte: new Date(`${dateTo}T23:59:59.999`) },
+    });
   }
   const where =
     andConditions.length > 1 ? { AND: andConditions } : andConditions[0];
